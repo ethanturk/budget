@@ -39,7 +39,12 @@ public sealed class HomeDashboardTests : IClassFixture<WebApplicationFactory<App
 
         Assert.Equal(HttpStatusCode.OK, homeResponse.StatusCode);
         Assert.Contains("Connected institutions", html);
+        Assert.Contains("Account balances", html);
+        Assert.Contains("View transactions", html);
         Assert.Contains("Recent transactions", html);
+        Assert.Contains("Transactions to show", html);
+        Assert.Contains("<option value=\"10\"", html);
+        Assert.Contains("<option value=\"25\"", html);
         Assert.Contains("Budget health", html);
         Assert.Contains("Recent sync activity", html);
     }

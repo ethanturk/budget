@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<SimpleFinConnectionService>();
         services.AddScoped<SimpleFinSyncService>();
         services.AddScoped<DashboardQueryService>();
+        services.AddScoped<AccountTransactionQueryService>();
         services.AddScoped<BudgetMonthSummaryService>();
         services.AddScoped<BudgetEditorService>();
         services.AddScoped<CategoryManagementService>();

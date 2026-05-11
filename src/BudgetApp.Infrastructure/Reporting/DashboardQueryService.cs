@@ -20,6 +20,16 @@ public sealed record DashboardRecentTransaction(
     decimal Amount,
     bool IsPending);
 
+public sealed record DashboardAccountBalance(
+    Guid AccountId,
+    string AccountName,
+    string? InstitutionName,
+    decimal CurrentBalance,
+    decimal? AvailableBalance,
+    string CurrencyCode,
+    bool IsClosed,
+    DateTimeOffset? AsOfAt);
+
 public sealed record DashboardSyncSummary(
     string Status,
     DateTimeOffset StartedAt,
@@ -44,7 +54,9 @@ public sealed record DashboardViewModel(
     DashboardBudgetSummary Budget,
     DashboardSyncSummary? LatestSync,
     IReadOnlyList<DashboardConnectionSummary> Connections,
+    IReadOnlyList<DashboardAccountBalance> AccountBalances,
     IReadOnlyList<DashboardRecentTransaction> RecentTransactions,
+    int RecentTransactionCount,
     IReadOnlyList<DashboardSyncSummary> RecentSyncRuns);
 
 public sealed class DashboardQueryService
@@ -56,8 +68,12 @@ public sealed class DashboardQueryService
         _dbContext = dbContext;
     }
 
-    public async Task<DashboardViewModel> GetDashboardAsync(CancellationToken cancellationToken)
+    public async Task<DashboardViewModel> GetDashboardAsync(CancellationToken cancellationToken) =>
+        await GetDashboardAsync(10, cancellationToken);
+
+    public async Task<DashboardViewModel> GetDashboardAsync(int recentTransactionCount, CancellationToken cancellationToken)
     {
+        recentTransactionCount = NormalizeRecentTransactionCount(recentTransactionCount);
         var connectionCount = await _dbContext.SimpleFinConnections.CountAsync(cancellationToken);
         var institutionCount = await _dbContext.Institutions.CountAsync(cancellationToken);
         var accountCount = await _dbContext.Accounts.CountAsync(cancellationToken);
@@ -116,6 +132,32 @@ public sealed class DashboardQueryService
 
         var latestSync = recentSyncRuns.FirstOrDefault();
 
+        var accountBalances = await _dbContext.Accounts
+            .OrderBy(x => x.SortIndex)
+            .ThenBy(x => x.Name)
+            .Select(account => new DashboardAccountBalance(
+                account.Id,
+                account.Name,
+                account.Institution != null ? account.Institution.Name : null,
+                account.BalanceSnapshots
+                    .OrderByDescending(snapshot => snapshot.AsOfAt)
+                    .Select(snapshot => (decimal?)snapshot.CurrentAmount)
+                    .FirstOrDefault() ?? 0m,
+                account.BalanceSnapshots
+                    .OrderByDescending(snapshot => snapshot.AsOfAt)
+                    .Select(snapshot => snapshot.AvailableAmount)
+                    .FirstOrDefault(),
+                account.BalanceSnapshots
+                    .OrderByDescending(snapshot => snapshot.AsOfAt)
+                    .Select(snapshot => snapshot.CurrencyCode)
+                    .FirstOrDefault() ?? account.CurrencyCode,
+                account.IsClosed,
+                account.BalanceSnapshots
+                    .OrderByDescending(snapshot => snapshot.AsOfAt)
+                    .Select(snapshot => (DateTimeOffset?)snapshot.AsOfAt)
+                    .FirstOrDefault()))
+            .ToListAsync(cancellationToken);
+
         var connections = await _dbContext.SimpleFinConnections
             .OrderByDescending(x => x.LastSuccessfulSyncAt ?? x.LastAttemptedSyncAt ?? x.CreatedAt)
             .Select(connection => new DashboardConnectionSummary(
@@ -141,7 +183,7 @@ public sealed class DashboardQueryService
         var recentTransactions = await _dbContext.Transactions
             .OrderByDescending(x => x.PostedAt)
             .ThenByDescending(x => x.ImportedAt)
-            .Take(10)
+            .Take(recentTransactionCount)
             .Select(x => new DashboardRecentTransaction(
                 x.PostedAt,
                 x.Description,
@@ -158,7 +200,18 @@ public sealed class DashboardQueryService
             budgetSummary,
             latestSync,
             connections,
+            accountBalances,
             recentTransactions,
+            recentTransactionCount,
             recentSyncRuns);
     }
+
+    private static int NormalizeRecentTransactionCount(int count) =>
+        count switch
+        {
+            25 => 25,
+            50 => 50,
+            100 => 100,
+            _ => 10
+        };
 }

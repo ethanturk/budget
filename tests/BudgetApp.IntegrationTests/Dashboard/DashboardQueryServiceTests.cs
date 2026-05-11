@@ -186,6 +186,14 @@ public sealed class DashboardQueryServiceTests
         Assert.Equal(2, dashboard.RecentTransactions.Count);
         Assert.Equal("Payroll", dashboard.RecentTransactions[0].Description);
         Assert.Equal("Primary Checking", dashboard.RecentTransactions[0].AccountName);
+        Assert.Single(dashboard.AccountBalances);
+        Assert.Equal(account.Id, dashboard.AccountBalances[0].AccountId);
+        Assert.Equal("Primary Checking", dashboard.AccountBalances[0].AccountName);
+        Assert.Equal("Checking Bank", dashboard.AccountBalances[0].InstitutionName);
+        Assert.Equal(2500.12m, dashboard.AccountBalances[0].CurrentBalance);
+        Assert.Equal(2400.12m, dashboard.AccountBalances[0].AvailableBalance);
+        Assert.Equal("USD", dashboard.AccountBalances[0].CurrencyCode);
+        Assert.False(dashboard.AccountBalances[0].IsClosed);
         Assert.Single(dashboard.Connections);
         Assert.Equal("Checking Bank", dashboard.Connections[0].InstitutionName);
         Assert.Equal(2500.12m, dashboard.Connections[0].CurrentBalance);
@@ -193,5 +201,54 @@ public sealed class DashboardQueryServiceTests
         Assert.Equal("succeeded", dashboard.RecentSyncRuns[0].Status);
         Assert.Equal("failed", dashboard.RecentSyncRuns[1].Status);
         Assert.Equal("Bridge timeout", dashboard.RecentSyncRuns[1].ErrorText);
+    }
+
+    [Fact]
+    public async Task GetDashboardAsync_UsesRequestedRecentTransactionCount()
+    {
+        var options = new DbContextOptionsBuilder<BudgetAppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var dbContext = new BudgetAppDbContext(options);
+        var account = new Account
+        {
+            Id = Guid.NewGuid(),
+            Provider = "simplefin",
+            ProviderConnectionId = "CON-1",
+            ProviderAccountId = "CHK-1",
+            Name = "Primary Checking",
+            CurrencyCode = "USD",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        dbContext.Accounts.Add(account);
+        for (var index = 0; index < 25; index++)
+        {
+            dbContext.Transactions.Add(new Transaction
+            {
+                Id = Guid.NewGuid(),
+                AccountId = account.Id,
+                Provider = "simplefin",
+                ProviderConnectionId = "CON-1",
+                ProviderTransactionId = $"TX-{index}",
+                PostedAt = DateTimeOffset.UtcNow.AddDays(-index),
+                Amount = -index,
+                Description = $"Transaction {index}",
+                ImportedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        var service = new DashboardQueryService(dbContext);
+
+        var dashboard = await service.GetDashboardAsync(25, CancellationToken.None);
+
+        Assert.Equal(25, dashboard.RecentTransactionCount);
+        Assert.Equal(25, dashboard.RecentTransactions.Count);
+        Assert.Equal("Transaction 0", dashboard.RecentTransactions[0].Description);
+        Assert.Equal("Transaction 24", dashboard.RecentTransactions[^1].Description);
     }
 }

@@ -1,0 +1,94 @@
+@page "/accounts/{AccountId:guid}"
+@using System.Globalization
+@using BudgetApp.Infrastructure.Reporting
+@inject AccountTransactionQueryService AccountTransactionQueryService
+
+<PageTitle>Account Transactions</PageTitle>
+
+@if (_account is null)
+{
+    <h1>Account not found</h1>
+    <p>The requested account could not be found.</p>
+    <a href="/">Back to dashboard</a>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div>
+            <h1>@_account.AccountName</h1>
+            <p class="lead mb-1">Transactions for this account.</p>
+            <p class="text-body-secondary mb-0">@(_account.InstitutionName ?? "Unknown institution") • @(_account.IsClosed ? "Closed" : "Open")</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="/">Back to dashboard</a>
+    </div>
+
+    <section class="card shadow-sm mt-4">
+        <div class="card-body">
+            <h2 class="h5 card-title">Balance</h2>
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Current balance</dt>
+                <dd class="col-sm-9">@FormatCurrency(_account.CurrentBalance)</dd>
+                <dt class="col-sm-3">Available balance</dt>
+                <dd class="col-sm-9">@(_account.AvailableBalance is null ? "—" : FormatCurrency(_account.AvailableBalance.Value))</dd>
+                <dt class="col-sm-3">Currency</dt>
+                <dd class="col-sm-9">@_account.CurrencyCode</dd>
+            </dl>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mt-4">
+        <div class="card-body">
+            <h2 class="h5 card-title">Account transactions</h2>
+            <p class="text-body-secondary">Posted and pending transactions imported for @_account.AccountName.</p>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Category</th>
+                            <th scope="col" class="text-end">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_account.Transactions.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="text-body-secondary">No transactions imported for this account yet.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var transaction in _account.Transactions)
+                            {
+                                <tr>
+                                    <td>@transaction.PostedAt.ToString("yyyy-MM-dd")</td>
+                                    <td>@transaction.Description</td>
+                                    <td>@(transaction.IsPending ? "Pending" : "Posted")</td>
+                                    <td>@(transaction.CategoryName ?? "Uncategorized")</td>
+                                    <td class="text-end @(transaction.Amount < 0 ? "text-danger" : "text-success")">@FormatCurrency(transaction.Amount)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public Guid AccountId { get; set; }
+
+    private AccountTransactionDetail? _account;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _account = await AccountTransactionQueryService.GetAccountTransactionsAsync(AccountId, CancellationToken.None);
+    }
+
+    private static string FormatCurrency(decimal amount) =>
+        amount.ToString("C", CultureInfo.GetCultureInfo("en-US"));
+}
