@@ -74,6 +74,46 @@ public sealed class SpendingReportServiceTests
         Assert.Equal(570m, groceries.Remaining);
     }
 
+    [Fact]
+    public async Task GetMonthlyReportAsync_AddsSpendingStatusAndPercentSpent()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        var dining = await SeedCategoryAsync(dbContext, "Food", "Dining");
+        var month = new BudgetMonth
+        {
+            Id = Guid.NewGuid(),
+            Month = new DateOnly(2026, 5, 1),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        dbContext.BudgetMonths.Add(month);
+        dbContext.BudgetAllocations.Add(new BudgetAllocation
+        {
+            Id = Guid.NewGuid(),
+            BudgetMonthId = month.Id,
+            CategoryId = dining.Id,
+            Amount = 100m,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        var account = await SeedAccountAsync(dbContext);
+        dbContext.Transactions.Add(BuildTransaction(
+            account.Id,
+            dining.Id,
+            new DateTimeOffset(2026, 5, 8, 0, 0, 0, TimeSpan.Zero),
+            -125m,
+            "Restaurant"));
+        await dbContext.SaveChangesAsync();
+        var service = new SpendingReportService(dbContext);
+
+        var report = await service.GetMonthlyReportAsync(new DateOnly(2026, 5, 1), CancellationToken.None);
+
+        var category = Assert.Single(report.Groups.Single(x => x.GroupName == "Food").Categories);
+        Assert.Equal(125m, category.PercentSpent);
+        Assert.Equal(SpendingStatus.OverBudget, category.Status);
+    }
+
     private static async Task<Category> SeedCategoryAsync(BudgetAppDbContext dbContext, string groupName, string categoryName)
     {
         var group = new CategoryGroup

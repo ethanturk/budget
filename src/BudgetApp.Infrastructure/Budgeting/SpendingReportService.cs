@@ -3,6 +3,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BudgetApp.Infrastructure.Budgeting;
 
+public enum SpendingStatus
+{
+    OnTrack,
+    NearLimit,
+    OverBudget
+}
+
 public sealed record MonthlySpendingReport(
     DateOnly Month,
     decimal TotalBudgeted,
@@ -23,7 +30,9 @@ public sealed record MonthlySpendingCategory(
     string CategoryName,
     decimal Budgeted,
     decimal Spent,
-    decimal Remaining);
+    decimal Remaining,
+    decimal PercentSpent,
+    SpendingStatus Status);
 
 public sealed class SpendingReportService
 {
@@ -119,12 +128,20 @@ public sealed class SpendingReportService
                 var groupCategories = group
                     .OrderBy(x => x.CategorySortIndex)
                     .ThenBy(x => x.CategoryName)
-                    .Select(x => new MonthlySpendingCategory(
-                        x.CategoryId,
-                        x.CategoryName,
-                        x.Budgeted,
-                        x.Spent,
-                        x.Budgeted - x.Spent))
+                    .Select(x =>
+                    {
+                        var remaining = x.Budgeted - x.Spent;
+                        var percentSpent = CalculatePercentSpent(x.Budgeted, x.Spent);
+
+                        return new MonthlySpendingCategory(
+                            x.CategoryId,
+                            x.CategoryName,
+                            x.Budgeted,
+                            x.Spent,
+                            remaining,
+                            percentSpent,
+                            DetermineStatus(percentSpent));
+                    })
                     .ToList();
                 var budgeted = groupCategories.Sum(x => x.Budgeted);
                 var spent = groupCategories.Sum(x => x.Spent);
@@ -151,6 +168,26 @@ public sealed class SpendingReportService
             totalBudgeted - totalSpent,
             uncategorizedSpent,
             groups);
+    }
+
+    private static decimal CalculatePercentSpent(decimal budgeted, decimal spent)
+    {
+        if (budgeted <= 0)
+        {
+            return spent > 0 ? 100m : 0m;
+        }
+
+        return Math.Round(spent / budgeted * 100m, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private static SpendingStatus DetermineStatus(decimal percentSpent)
+    {
+        if (percentSpent > 100m)
+        {
+            return SpendingStatus.OverBudget;
+        }
+
+        return percentSpent >= 90m ? SpendingStatus.NearLimit : SpendingStatus.OnTrack;
     }
 
     private sealed record SpendingRow(

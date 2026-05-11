@@ -43,6 +43,51 @@ public sealed class TransactionCategorizationServiceTests
     }
 
     [Fact]
+    public async Task BulkCategorizeTransactionsAsync_AssignsFilteredUncategorizedPostedTransactions()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        var category = await SeedCategoryAsync(dbContext);
+        var account = await SeedAccountAsync(dbContext);
+        var matching = BuildTransaction(account.Id, "Kroger Marketplace", -82.45m);
+        var belowMinimum = BuildTransaction(account.Id, "Kroger Fuel", -12.00m);
+        var differentMerchant = BuildTransaction(account.Id, "Gibson County Gas", -95.00m);
+        var alreadyCategorized = BuildTransaction(account.Id, "Kroger Restaurant", -100.00m, category.Id);
+        var pending = BuildTransaction(account.Id, "Kroger Pending", -125.00m, isPending: true);
+        dbContext.Transactions.AddRange(matching, belowMinimum, differentMerchant, alreadyCategorized, pending);
+        await dbContext.SaveChangesAsync();
+        var service = new TransactionCategorizationService(dbContext);
+
+        var result = await service.BulkCategorizeTransactionsAsync(
+            new BulkCategorizeTransactionsRequest(category.Id, new TransactionReviewFilter(25, "kroger", 50m)),
+            CancellationToken.None);
+
+        Assert.Equal(category.Id, result.CategoryId);
+        Assert.Equal(1, result.CategorizedCount);
+        Assert.Contains(matching.Id, result.TransactionIds);
+        Assert.Equal(category.Id, await dbContext.Transactions.Where(x => x.Id == matching.Id).Select(x => x.CategoryId).SingleAsync());
+        Assert.Null(await dbContext.Transactions.Where(x => x.Id == belowMinimum.Id).Select(x => x.CategoryId).SingleAsync());
+        Assert.Null(await dbContext.Transactions.Where(x => x.Id == differentMerchant.Id).Select(x => x.CategoryId).SingleAsync());
+        Assert.Equal(category.Id, await dbContext.Transactions.Where(x => x.Id == alreadyCategorized.Id).Select(x => x.CategoryId).SingleAsync());
+        Assert.Null(await dbContext.Transactions.Where(x => x.Id == pending.Id).Select(x => x.CategoryId).SingleAsync());
+    }
+
+    [Fact]
+    public async Task BulkCategorizeTransactionsAsync_ThrowsWhenCategoryDoesNotExist()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        var service = new TransactionCategorizationService(dbContext);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.BulkCategorizeTransactionsAsync(
+                new BulkCategorizeTransactionsRequest(Guid.NewGuid(), new TransactionReviewFilter(25, null, null)),
+                CancellationToken.None));
+
+        Assert.Equal("Category was not found.", exception.Message);
+    }
+
+    [Fact]
     public async Task CategorizeTransactionAsync_ThrowsWhenCategoryDoesNotExist()
     {
         var options = CreateOptions();
@@ -112,16 +157,23 @@ public sealed class TransactionCategorizationServiceTests
         return account;
     }
 
-    private static Transaction BuildTransaction(Guid accountId, string description) => new()
+    private static Transaction BuildTransaction(
+        Guid accountId,
+        string description,
+        decimal amount = -6.50m,
+        Guid? categoryId = null,
+        bool isPending = false) => new()
     {
         Id = Guid.NewGuid(),
         AccountId = accountId,
+        CategoryId = categoryId,
         Provider = "simplefin",
         ProviderConnectionId = "conn-1",
         ProviderTransactionId = Guid.NewGuid().ToString("N"),
         PostedAt = DateTimeOffset.UtcNow,
-        Amount = -6.50m,
+        Amount = amount,
         Description = description,
+        IsPending = isPending,
         ImportedAt = DateTimeOffset.UtcNow,
         UpdatedAt = DateTimeOffset.UtcNow
     };

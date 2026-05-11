@@ -321,6 +321,7 @@
             <div class="card-body">
                 <h2 class="h5 card-title">Review uncategorized transactions</h2>
                 <p class="text-body-secondary">Assign categories to recent posted transactions so they flow into spending reports.</p>
+                <p class="visually-hidden">Bulk assign filtered transactions with Assign all visible after filters are applied.</p>
 
                 <form method="get" action="/budget" class="row g-3 align-items-end mb-3">
                     <div class="col-12 col-lg-5">
@@ -350,6 +351,28 @@
                 else
                 {
                     <div class="vstack gap-3">
+                        <form method="post" action="/budget/transactions/bulk-category" class="border rounded p-3 bg-body-tertiary">
+                            <h3 class="h6">Bulk assign filtered transactions</h3>
+                            <p class="text-body-secondary">Assign all visible uncategorized transactions that match the current filters.</p>
+                            <input type="hidden" name="transactionSearch" value="@TransactionSearch" />
+                            <input type="hidden" name="minimumAmount" value="@MinimumAmount" />
+                            <div class="row g-3 align-items-end">
+                                <div class="col-12 col-lg-9">
+                                    <label class="form-label" for="bulkCategoryId">Category</label>
+                                    <select id="bulkCategoryId" name="categoryId" class="form-select" required>
+                                        <option value="">Choose category</option>
+                                        @foreach (var category in _transactionReview.CategoryOptions)
+                                        {
+                                            <option value="@category.CategoryId">@category.GroupName — @category.CategoryName</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-12 col-lg-3">
+                                    <button type="submit" class="btn btn-primary w-100">Assign all visible</button>
+                                </div>
+                            </div>
+                        </form>
+
                         @foreach (var transaction in _transactionReview.Transactions)
                         {
                             <form method="post" action="/budget/transactions/@transaction.TransactionId/category" class="border rounded p-3">

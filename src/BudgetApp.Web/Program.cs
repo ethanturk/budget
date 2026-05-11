@@ -349,6 +349,63 @@ app.MapPost("/budget/category-rules/{ruleId:guid}/deactivate", async Task<Result
     }
 }).DisableAntiforgery();
 
+app.MapPost("/budget/transactions/bulk-category", async Task<Results<RedirectHttpResult, ContentHttpResult>> (
+    HttpContext httpContext,
+    TransactionCategorizationService categorizationService,
+    CancellationToken cancellationToken) =>
+{
+    var form = await httpContext.Request.ReadFormAsync(cancellationToken);
+    var categoryValue = form["categoryId"].ToString().Trim();
+    var searchText = form["transactionSearch"].ToString();
+    var minimumAmountValue = form["minimumAmount"].ToString().Trim();
+
+    if (!Guid.TryParse(categoryValue, out var categoryId))
+    {
+        return TypedResults.Content("Category is required.", "text/plain", Encoding.UTF8, StatusCodes.Status400BadRequest);
+    }
+
+    decimal? minimumAmount = null;
+    if (!string.IsNullOrWhiteSpace(minimumAmountValue))
+    {
+        if (!decimal.TryParse(minimumAmountValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedMinimumAmount))
+        {
+            return TypedResults.Content("Minimum amount must be a valid number.", "text/plain", Encoding.UTF8, StatusCodes.Status400BadRequest);
+        }
+
+        minimumAmount = parsedMinimumAmount;
+    }
+
+    try
+    {
+        await categorizationService.BulkCategorizeTransactionsAsync(
+            new BulkCategorizeTransactionsRequest(categoryId, new TransactionReviewFilter(25, searchText, minimumAmount)),
+            cancellationToken);
+
+        var redirectUrl = "/budget";
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            query.Add($"transactionSearch={Uri.EscapeDataString(searchText.Trim())}");
+        }
+
+        if (minimumAmount is not null)
+        {
+            query.Add($"minimumAmount={minimumAmount.Value.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (query.Count > 0)
+        {
+            redirectUrl += "?" + string.Join('&', query);
+        }
+
+        return TypedResults.Redirect(redirectUrl);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return TypedResults.Content(ex.Message, "text/plain", Encoding.UTF8, StatusCodes.Status400BadRequest);
+    }
+}).DisableAntiforgery();
+
 app.MapPost("/budget/transactions/{transactionId:guid}/category", async Task<Results<RedirectHttpResult, NotFound<string>, ContentHttpResult>> (
     Guid transactionId,
     HttpContext httpContext,

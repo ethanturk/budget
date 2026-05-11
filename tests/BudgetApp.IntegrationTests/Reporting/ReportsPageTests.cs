@@ -36,6 +36,10 @@ public sealed class ReportsPageTests : IClassFixture<WebApplicationFactory<App>>
         Assert.Contains("Budgeted", html);
         Assert.Contains("Spent", html);
         Assert.Contains("Remaining", html);
+        Assert.Contains("Spending status", html);
+        Assert.Contains("On track", html);
+        Assert.Contains("Near limit", html);
+        Assert.Contains("Over budget", html);
     }
 
     [Fact]

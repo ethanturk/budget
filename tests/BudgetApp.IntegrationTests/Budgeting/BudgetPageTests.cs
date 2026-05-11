@@ -45,6 +45,8 @@ public sealed class BudgetPageTests : IClassFixture<WebApplicationFactory<App>>
         Assert.Contains("Description search", html);
         Assert.Contains("Minimum amount", html);
         Assert.Contains("Apply filters", html);
+        Assert.Contains("Bulk assign filtered transactions", html);
+        Assert.Contains("Assign all visible", html);
         Assert.Contains("Auto-categorization rules", html);
         Assert.Contains("Existing rules", html);
         Assert.Contains("Disable rule", html);
@@ -166,6 +168,29 @@ public sealed class BudgetPageTests : IClassFixture<WebApplicationFactory<App>>
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Contains("Auto-categorization rule was not found.", body);
+    }
+
+    [Fact]
+    public async Task PostBulkTransactionCategory_WithInvalidCategory_ReturnsBadRequest()
+    {
+        using var client = CreateClientWithInMemoryDatabase();
+
+        var authCookie = await SignInAsync(client);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/budget/transactions/bulk-category");
+        request.Headers.Add("Cookie", authCookie);
+        request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["categoryId"] = "not-a-guid",
+            ["transactionSearch"] = "kroger",
+            ["minimumAmount"] = "50"
+        });
+
+        using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Category is required.", body);
     }
 
     private HttpClient CreateClientWithInMemoryDatabase()
