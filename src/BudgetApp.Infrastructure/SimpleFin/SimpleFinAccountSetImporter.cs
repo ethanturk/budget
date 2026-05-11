@@ -28,8 +28,10 @@ public sealed class SimpleFinAccountSetImporter
 
         var accounts = await _dbContext.Accounts
             .Include(x => x.BalanceSnapshots)
-            .Include(x => x.Transactions)
             .ToDictionaryAsync(x => $"{x.Provider}:{x.ProviderConnectionId}:{x.ProviderAccountId}", cancellationToken);
+
+        var transactions = await _dbContext.Transactions
+            .ToDictionaryAsync(x => $"{x.AccountId}:{x.Provider}:{x.ProviderConnectionId}:{x.ProviderTransactionId}", cancellationToken);
 
         var connectionsById = payload.Connections.ToDictionary(x => x.ConnId, StringComparer.Ordinal);
 
@@ -119,12 +121,8 @@ public sealed class SimpleFinAccountSetImporter
             {
                 transactionsSeen++;
 
-                var existingTransaction = account.Transactions.FirstOrDefault(x =>
-                    x.Provider == Provider &&
-                    x.ProviderConnectionId == accountResponse.ConnId &&
-                    x.ProviderTransactionId == transactionResponse.Id);
-
-                if (existingTransaction is null)
+                var transactionKey = $"{account.Id}:{Provider}:{accountResponse.ConnId}:{transactionResponse.Id}";
+                if (!transactions.TryGetValue(transactionKey, out var existingTransaction))
                 {
                     existingTransaction = new Transaction
                     {
@@ -136,7 +134,8 @@ public sealed class SimpleFinAccountSetImporter
                         ImportedAt = importedAt
                     };
 
-                    account.Transactions.Add(existingTransaction);
+                    transactions[transactionKey] = existingTransaction;
+                    _dbContext.Transactions.Add(existingTransaction);
                     transactionsInserted++;
                 }
                 else
