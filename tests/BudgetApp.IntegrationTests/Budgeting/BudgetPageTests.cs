@@ -41,6 +41,10 @@ public sealed class BudgetPageTests : IClassFixture<WebApplicationFactory<App>>
         Assert.Contains("Category catalog", html);
         Assert.Contains("Spending vs budget", html);
         Assert.Contains("Review uncategorized transactions", html);
+        Assert.Contains("Filter transactions", html);
+        Assert.Contains("Description search", html);
+        Assert.Contains("Minimum amount", html);
+        Assert.Contains("Apply filters", html);
         Assert.Contains("Auto-categorization rules", html);
         Assert.Contains("Existing rules", html);
         Assert.Contains("Disable rule", html);

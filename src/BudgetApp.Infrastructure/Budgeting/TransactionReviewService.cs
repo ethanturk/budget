@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BudgetApp.Infrastructure.Budgeting;
 
+public sealed record TransactionReviewFilter(int Limit, string? SearchText, decimal? MinimumAmount);
+
 public sealed record UncategorizedTransactionReview(
     IReadOnlyList<UncategorizedTransactionSummary> Transactions,
     IReadOnlyList<TransactionCategoryOption> CategoryOptions);
@@ -27,14 +29,33 @@ public sealed class TransactionReviewService
         _dbContext = dbContext;
     }
 
-    public async Task<UncategorizedTransactionReview> GetUncategorizedTransactionsAsync(
+    public Task<UncategorizedTransactionReview> GetUncategorizedTransactionsAsync(
         int limit,
+        CancellationToken cancellationToken) =>
+        GetUncategorizedTransactionsAsync(new TransactionReviewFilter(limit, null, null), cancellationToken);
+
+    public async Task<UncategorizedTransactionReview> GetUncategorizedTransactionsAsync(
+        TransactionReviewFilter filter,
         CancellationToken cancellationToken)
     {
-        var safeLimit = Math.Clamp(limit, 1, 100);
+        var safeLimit = Math.Clamp(filter.Limit, 1, 100);
+        var searchText = filter.SearchText?.Trim();
+        var minimumAmount = filter.MinimumAmount is > 0 ? filter.MinimumAmount.Value : (decimal?)null;
 
-        var transactions = await _dbContext.Transactions
-            .Where(x => x.CategoryId == null && !x.IsPending)
+        var transactionQuery = _dbContext.Transactions
+            .Where(x => x.CategoryId == null && !x.IsPending);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            transactionQuery = transactionQuery.Where(x => x.Description.ToLower().Contains(searchText.ToLower()));
+        }
+
+        if (minimumAmount is not null)
+        {
+            transactionQuery = transactionQuery.Where(x => Math.Abs(x.Amount) >= minimumAmount.Value);
+        }
+
+        var transactions = await transactionQuery
             .OrderByDescending(x => x.PostedAt)
             .ThenBy(x => x.Description)
             .Take(safeLimit)

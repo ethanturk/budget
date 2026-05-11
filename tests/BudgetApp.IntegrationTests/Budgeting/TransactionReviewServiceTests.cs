@@ -32,6 +32,56 @@ public sealed class TransactionReviewServiceTests
         Assert.Equal("Dining", option.CategoryName);
     }
 
+    [Fact]
+    public async Task GetUncategorizedTransactionsAsync_FiltersBySearchTextAndMinimumAmount()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        await SeedCategoryAsync(dbContext, "Food", "Groceries");
+        var account = await SeedAccountAsync(dbContext);
+        dbContext.Transactions.AddRange(
+            BuildTransaction(account.Id, null, -82.45m, "Kroger Marketplace", new DateTimeOffset(2026, 5, 5, 0, 0, 0, TimeSpan.Zero)),
+            BuildTransaction(account.Id, null, -12.00m, "Kroger Fuel", new DateTimeOffset(2026, 5, 4, 0, 0, 0, TimeSpan.Zero)),
+            BuildTransaction(account.Id, null, -95.00m, "Gibson County Gas", new DateTimeOffset(2026, 5, 3, 0, 0, 0, TimeSpan.Zero)));
+        await dbContext.SaveChangesAsync();
+        var service = new TransactionReviewService(dbContext);
+
+        var review = await service.GetUncategorizedTransactionsAsync(
+            new TransactionReviewFilter(10, "kroger", 50m),
+            CancellationToken.None);
+
+        var transaction = Assert.Single(review.Transactions);
+        Assert.Equal("Kroger Marketplace", transaction.Description);
+        Assert.Equal(82.45m, transaction.SpendingAmount);
+    }
+
+    [Fact]
+    public async Task GetUncategorizedTransactionsAsync_ClampsLimitAndTreatsBlankFiltersAsNoFilter()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        await SeedCategoryAsync(dbContext, "Food", "Groceries");
+        var account = await SeedAccountAsync(dbContext);
+        for (var index = 0; index < 105; index++)
+        {
+            dbContext.Transactions.Add(BuildTransaction(
+                account.Id,
+                null,
+                -1m,
+                $"Transaction {index:000}",
+                new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero).AddDays(index)));
+        }
+        await dbContext.SaveChangesAsync();
+        var service = new TransactionReviewService(dbContext);
+
+        var review = await service.GetUncategorizedTransactionsAsync(
+            new TransactionReviewFilter(250, "   ", null),
+            CancellationToken.None);
+
+        Assert.Equal(100, review.Transactions.Count);
+        Assert.Equal("Transaction 104", review.Transactions[0].Description);
+    }
+
     private static async Task<Category> SeedCategoryAsync(BudgetAppDbContext dbContext, string groupName, string categoryName)
     {
         var group = new CategoryGroup

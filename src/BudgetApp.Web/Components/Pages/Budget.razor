@@ -322,6 +322,23 @@
                 <h2 class="h5 card-title">Review uncategorized transactions</h2>
                 <p class="text-body-secondary">Assign categories to recent posted transactions so they flow into spending reports.</p>
 
+                <form method="get" action="/budget" class="row g-3 align-items-end mb-3">
+                    <div class="col-12 col-lg-5">
+                        <label class="form-label" for="transactionSearch">Description search</label>
+                        <input id="transactionSearch" name="transactionSearch" class="form-control" type="search" value="@TransactionSearch" placeholder="KROGER" />
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label" for="minimumAmount">Minimum amount</label>
+                        <input id="minimumAmount" name="minimumAmount" class="form-control" type="number" step="0.01" min="0" value="@MinimumAmount" placeholder="25.00" />
+                    </div>
+                    <div class="col-12 col-lg-3">
+                        <button type="submit" class="btn btn-outline-primary w-100">Apply filters</button>
+                    </div>
+                    <div class="col-12">
+                        <span class="text-body-secondary">Filter transactions before assigning categories.</span>
+                    </div>
+                </form>
+
                 @if (_transactionReview is null || _transactionReview.Transactions.Count == 0)
                 {
                     <p class="mb-0">No uncategorized posted transactions need review.</p>
@@ -365,6 +382,12 @@
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "transactionSearch")]
+    private string? TransactionSearch { get; set; }
+
+    [SupplyParameterFromQuery(Name = "minimumAmount")]
+    private decimal? MinimumAmount { get; set; }
+
     private BudgetMonthSummary? _summary;
     private CategoryCatalog? _catalog;
     private MonthlySpendingReport? _spendingReport;
@@ -381,7 +404,9 @@
             _catalog = await CategoryManagementService.GetCatalogAsync(CancellationToken.None);
             var reportMonth = _summary?.Month ?? DateOnly.FromDateTime(DateTime.Today).AddDays(1 - DateTime.Today.Day);
             _spendingReport = await SpendingReportService.GetMonthlyReportAsync(reportMonth, CancellationToken.None);
-            _transactionReview = await TransactionReviewService.GetUncategorizedTransactionsAsync(25, CancellationToken.None);
+            _transactionReview = await TransactionReviewService.GetUncategorizedTransactionsAsync(
+                new TransactionReviewFilter(25, TransactionSearch, MinimumAmount),
+                CancellationToken.None);
             _categoryRules = await AutoCategorizationService.GetRulesAsync(CancellationToken.None);
 
             if (_summary is not null)
