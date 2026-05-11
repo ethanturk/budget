@@ -45,12 +45,14 @@ public sealed class SimpleFinClient
             throw new InvalidOperationException("SimpleFIN access URL must include Basic Auth credentials.");
         }
 
+        var endDate = DateTimeOffset.UtcNow;
+        var startDate = endDate.AddDays(-90);
         var builder = new UriBuilder(accessUri)
         {
             UserName = string.Empty,
             Password = string.Empty,
             Path = $"{accessUri.AbsolutePath.TrimEnd('/')}/accounts",
-            Query = "version=2"
+            Query = $"version=2&start-date={startDate.ToUnixTimeSeconds()}&end-date={endDate.ToUnixTimeSeconds()}"
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Get, builder.Uri);

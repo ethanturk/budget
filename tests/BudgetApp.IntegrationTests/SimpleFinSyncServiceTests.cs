@@ -29,7 +29,11 @@ public sealed class SimpleFinSyncServiceTests
         dbContext.SimpleFinConnections.Add(connection);
         await dbContext.SaveChangesAsync();
 
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        Uri? requestedUri = null;
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(request =>
+        {
+            requestedUri = request.RequestUri;
+            return new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("""
             {
@@ -72,6 +76,7 @@ public sealed class SimpleFinSyncServiceTests
               ]
             }
             """)
+            };
         }));
 
         var client = new SimpleFinClient(httpClient);
@@ -99,6 +104,10 @@ public sealed class SimpleFinSyncServiceTests
 
         Assert.Equal(1, await dbContext.Accounts.CountAsync());
         Assert.Equal(2, await dbContext.Transactions.CountAsync());
+        Assert.NotNull(requestedUri);
+        Assert.Contains("version=2", requestedUri!.Query);
+        Assert.Contains("start-date=", requestedUri.Query);
+        Assert.Contains("end-date=", requestedUri.Query);
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

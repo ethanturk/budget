@@ -34,7 +34,10 @@ public sealed class SimpleFinClientTests
         var handler = new StubHttpMessageHandler(request =>
         {
             Assert.Equal(HttpMethod.Get, request.Method);
-            Assert.Equal("https://bridge.simplefin.org/simplefin/accounts?version=2", request.RequestUri?.ToString());
+            Assert.StartsWith("https://bridge.simplefin.org/simplefin/accounts?", request.RequestUri?.ToString());
+            Assert.Contains("version=2", request.RequestUri?.Query);
+            Assert.Contains("start-date=", request.RequestUri?.Query);
+            Assert.Contains("end-date=", request.RequestUri?.Query);
             Assert.Equal("Basic ZGVtbzpzZWNyZXQ=", request.Headers.Authorization?.ToString());
 
             return new HttpResponseMessage(HttpStatusCode.OK)
