@@ -1,0 +1,400 @@
+@page "/budget"
+@using System.Globalization
+@using BudgetApp.Infrastructure.Budgeting
+@inject BudgetMonthSummaryService BudgetMonthSummaryService
+@inject CategoryManagementService CategoryManagementService
+@inject SpendingReportService SpendingReportService
+@inject TransactionReviewService TransactionReviewService
+@inject AutoCategorizationService AutoCategorizationService
+
+<PageTitle>Budget plan</PageTitle>
+
+<h1>Budget plan</h1>
+
+<p class="lead">Create categories, define a month plan, and assign dollars to the envelopes that matter most.</p>
+
+@if (!string.IsNullOrWhiteSpace(_loadError))
+{
+    <div class="alert alert-warning" role="alert">
+        Budget data is temporarily unavailable. You can try again after the database is available.
+    </div>
+}
+
+<div class="row g-4 mt-1">
+    <div class="col-12 col-xl-5">
+        <section class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5 card-title">Create or update allocation</h2>
+                <p class="text-body-secondary">Add a category group, category, and month allocation in one step. Existing entries are reused and updated.</p>
+
+                <form method="post" action="/budget/allocations" class="vstack gap-3">
+                    <div>
+                        <label class="form-label" for="month">Budget month</label>
+                        <input id="month" name="month" class="form-control" type="month" value="@_defaultMonth" required />
+                    </div>
+
+                    <div>
+                        <label class="form-label" for="groupName">Category group</label>
+                        <input id="groupName" name="groupName" class="form-control" type="text" placeholder="Housing" required />
+                    </div>
+
+                    <div>
+                        <label class="form-label" for="categoryName">Category</label>
+                        <input id="categoryName" name="categoryName" class="form-control" type="text" placeholder="Rent" required />
+                    </div>
+
+                    <div>
+                        <label class="form-label" for="amount">Allocated amount</label>
+                        <input id="amount" name="amount" class="form-control" type="number" step="0.01" min="0" placeholder="0.00" required />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Save allocation</button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12 col-xl-7">
+        <section class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5 card-title">Current month summary</h2>
+                <p class="text-body-secondary">Latest budget month with grouped envelope allocations.</p>
+
+                @if (_summary is null)
+                {
+                    <p class="mb-0">No budget month has been created yet.</p>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <div><strong>Month:</strong> @_summary.Month.ToString("yyyy-MM")</div>
+                        <div><strong>Total budgeted:</strong> @FormatCurrency(_summary.TotalBudgeted)</div>
+                        <div><strong>Groups:</strong> @_summary.GroupCount</div>
+                        <div><strong>Categories:</strong> @_summary.CategoryCount</div>
+                    </div>
+
+                    <div class="accordion" id="budget-groups">
+                        @for (var index = 0; index < _summary.Groups.Count; index++)
+                        {
+                            var group = _summary.Groups[index];
+                            var collapseId = $"budget-group-{index}";
+                            <div class="accordion-item">
+                                <h3 class="accordion-header">
+                                    <button class="accordion-button @(index == 0 ? string.Empty : "collapsed")" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="@(index == 0 ? "true" : "false")" aria-controls="@collapseId">
+                                        @group.GroupName — @FormatCurrency(group.TotalBudgeted)
+                                    </button>
+                                </h3>
+                                <div id="@collapseId" class="accordion-collapse collapse @(index == 0 ? "show" : string.Empty)">
+                                    <div class="accordion-body">
+                                        <ul class="list-group list-group-flush">
+                                            @foreach (var category in group.Categories)
+                                            {
+                                                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                                    <span>@category.CategoryName</span>
+                                                    <strong>@FormatCurrency(category.Amount)</strong>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-12 col-xl-5">
+        <section class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5 card-title">Manage categories</h2>
+                <p class="text-body-secondary">Create reusable category groups and categories before assigning monthly dollars.</p>
+
+                <form method="post" action="/budget/categories" class="vstack gap-3">
+                    <div>
+                        <label class="form-label" for="newGroupName">Category group</label>
+                        <input id="newGroupName" name="groupName" class="form-control" type="text" placeholder="Transportation" required />
+                    </div>
+
+                    <div>
+                        <label class="form-label" for="newCategoryName">Category</label>
+                        <input id="newCategoryName" name="categoryName" class="form-control" type="text" placeholder="Fuel" required />
+                    </div>
+
+                    <button type="submit" class="btn btn-outline-primary">Save category</button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12 col-xl-7">
+        <section class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5 card-title">Category catalog</h2>
+                <p class="text-body-secondary">Active categories available for budget planning.</p>
+
+                @if (_catalog is null || _catalog.Groups.Count == 0)
+                {
+                    <p class="mb-0">No active categories have been created yet.</p>
+                }
+                else
+                {
+                    <div class="vstack gap-3">
+                        @foreach (var group in _catalog.Groups)
+                        {
+                            <div>
+                                <h3 class="h6 mb-2">@group.GroupName</h3>
+                                <ul class="list-group list-group-flush">
+                                    @foreach (var category in group.Categories)
+                                    {
+                                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                            <span>@category.CategoryName</span>
+                                            <form method="post" action="/budget/categories/@category.CategoryId/archive">
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary">Archive</button>
+                                            </form>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <section class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 card-title">Auto-categorization rules</h2>
+                <p class="text-body-secondary">Create simple description-matching rules, then apply them to uncategorized posted transactions.</p>
+                <p class="visually-hidden">Existing rules can be reviewed here. Disable rule entries that should no longer auto-categorize transactions.</p>
+
+                @if (_catalog is null || _catalog.Groups.Count == 0)
+                {
+                    <p class="mb-0">Create categories before adding auto-categorization rules.</p>
+                }
+                else
+                {
+                    <form method="post" action="/budget/category-rules" class="row g-3 align-items-end mb-3">
+                        <div class="col-12 col-lg-5">
+                            <label class="form-label" for="ruleCategoryId">Category</label>
+                            <select id="ruleCategoryId" name="categoryId" class="form-select" required>
+                                <option value="">Choose category</option>
+                                @foreach (var group in _catalog.Groups)
+                                {
+                                    @foreach (var category in group.Categories)
+                                    {
+                                        <option value="@category.CategoryId">@group.GroupName — @category.CategoryName</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12 col-lg-5">
+                            <label class="form-label" for="matchText">Description contains</label>
+                            <input id="matchText" name="matchText" class="form-control" type="text" placeholder="KROGER" required />
+                        </div>
+                        <div class="col-12 col-lg-2">
+                            <button type="submit" class="btn btn-outline-primary w-100">Save rule</button>
+                        </div>
+                    </form>
+
+                    <form method="post" action="/budget/category-rules/apply" class="mb-4">
+                        <button type="submit" class="btn btn-primary">Apply rules now</button>
+                    </form>
+
+                    <h3 class="h6">Existing rules</h3>
+                    @if (_categoryRules.Count == 0)
+                    {
+                        <p class="mb-0">No auto-categorization rules have been created yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group list-group-flush">
+                            @foreach (var rule in _categoryRules)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                    <div>
+                                        <div><strong>@rule.MatchText</strong> → @rule.GroupName — @rule.CategoryName</div>
+                                        <div class="text-body-secondary">Status: @(rule.IsActive ? "Active" : "Inactive")</div>
+                                    </div>
+                                    @if (rule.IsActive)
+                                    {
+                                        <form method="post" action="/budget/category-rules/@rule.RuleId/deactivate">
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary">Disable rule</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-secondary">Disabled</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <section class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 card-title">Spending vs budget</h2>
+                <p class="text-body-secondary">Compare categorized posted transactions against this month's planned allocations.</p>
+
+                @if (_spendingReport is null)
+                {
+                    <p class="mb-0">No spending report is available yet.</p>
+                }
+                else
+                {
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-3"><strong>Month:</strong> @_spendingReport.Month.ToString("yyyy-MM")</div>
+                        <div class="col-12 col-md-3"><strong>Budgeted:</strong> @FormatCurrency(_spendingReport.TotalBudgeted)</div>
+                        <div class="col-12 col-md-3"><strong>Spent:</strong> @FormatCurrency(_spendingReport.TotalSpent)</div>
+                        <div class="col-12 col-md-3"><strong>Remaining:</strong> @FormatCurrency(_spendingReport.TotalRemaining)</div>
+                    </div>
+
+                    @if (_spendingReport.UncategorizedSpent != 0)
+                    {
+                        <div class="alert alert-info" role="status">
+                            Uncategorized spending this month: @FormatCurrency(_spendingReport.UncategorizedSpent)
+                        </div>
+                    }
+
+                    @if (_spendingReport.Groups.Count == 0)
+                    {
+                        <p class="mb-0">Add budget allocations and categorized transactions to populate this report.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th class="text-end">Budgeted</th>
+                                        <th class="text-end">Spent</th>
+                                        <th class="text-end">Remaining</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var group in _spendingReport.Groups)
+                                    {
+                                        <tr class="table-light">
+                                            <th>@group.GroupName</th>
+                                            <th class="text-end">@FormatCurrency(group.Budgeted)</th>
+                                            <th class="text-end">@FormatCurrency(group.Spent)</th>
+                                            <th class="text-end">@FormatCurrency(group.Remaining)</th>
+                                        </tr>
+                                        @foreach (var category in group.Categories)
+                                        {
+                                            <tr>
+                                                <td>@category.CategoryName</td>
+                                                <td class="text-end">@FormatCurrency(category.Budgeted)</td>
+                                                <td class="text-end">@FormatCurrency(category.Spent)</td>
+                                                <td class="text-end">@FormatCurrency(category.Remaining)</td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <section class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 card-title">Review uncategorized transactions</h2>
+                <p class="text-body-secondary">Assign categories to recent posted transactions so they flow into spending reports.</p>
+
+                @if (_transactionReview is null || _transactionReview.Transactions.Count == 0)
+                {
+                    <p class="mb-0">No uncategorized posted transactions need review.</p>
+                }
+                else if (_transactionReview.CategoryOptions.Count == 0)
+                {
+                    <p class="mb-0">Create categories before assigning transactions.</p>
+                }
+                else
+                {
+                    <div class="vstack gap-3">
+                        @foreach (var transaction in _transactionReview.Transactions)
+                        {
+                            <form method="post" action="/budget/transactions/@transaction.TransactionId/category" class="border rounded p-3">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-12 col-lg-5">
+                                        <div class="fw-semibold">@transaction.Description</div>
+                                        <div class="text-body-secondary">@transaction.PostedAt.ToString("yyyy-MM-dd") · @FormatCurrency(transaction.SpendingAmount)</div>
+                                    </div>
+                                    <div class="col-12 col-lg-5">
+                                        <label class="form-label" for="category-@transaction.TransactionId">Category</label>
+                                        <select id="category-@transaction.TransactionId" name="categoryId" class="form-select" required>
+                                            <option value="">Choose category</option>
+                                            @foreach (var category in _transactionReview.CategoryOptions)
+                                            {
+                                                <option value="@category.CategoryId">@category.GroupName — @category.CategoryName</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-lg-2">
+                                        <button type="submit" class="btn btn-outline-primary w-100">Assign</button>
+                                    </div>
+                                </div>
+                            </form>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private BudgetMonthSummary? _summary;
+    private CategoryCatalog? _catalog;
+    private MonthlySpendingReport? _spendingReport;
+    private UncategorizedTransactionReview? _transactionReview;
+    private IReadOnlyList<CategoryRuleListItem> _categoryRules = [];
+    private string? _loadError;
+    private string _defaultMonth = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM", CultureInfo.InvariantCulture);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _summary = await BudgetMonthSummaryService.GetCurrentMonthSummaryAsync(CancellationToken.None);
+            _catalog = await CategoryManagementService.GetCatalogAsync(CancellationToken.None);
+            var reportMonth = _summary?.Month ?? DateOnly.FromDateTime(DateTime.Today).AddDays(1 - DateTime.Today.Day);
+            _spendingReport = await SpendingReportService.GetMonthlyReportAsync(reportMonth, CancellationToken.None);
+            _transactionReview = await TransactionReviewService.GetUncategorizedTransactionsAsync(25, CancellationToken.None);
+            _categoryRules = await AutoCategorizationService.GetRulesAsync(CancellationToken.None);
+
+            if (_summary is not null)
+            {
+                _defaultMonth = _summary.Month.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+            }
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+    }
+
+    private static string FormatCurrency(decimal amount) =>
+        amount.ToString("C", CultureInfo.GetCultureInfo("en-US"));
+}

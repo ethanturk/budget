@@ -1,0 +1,144 @@
+@page "/reports"
+@using System.Globalization
+@using BudgetApp.Infrastructure.Budgeting
+@inject SpendingReportService SpendingReportService
+
+<PageTitle>Reports</PageTitle>
+
+<h1>Reports</h1>
+
+<p class="lead">Review actual spending against the budget plan for a selected month.</p>
+
+@if (!string.IsNullOrWhiteSpace(_loadError))
+{
+    <div class="alert alert-warning" role="alert">
+        Report data is temporarily unavailable. You can try again after the database is available.
+    </div>
+}
+
+<section class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h2 class="h5 card-title">Report filters</h2>
+        <form method="get" action="/reports" class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="month">Month</label>
+                <input id="month" name="month" class="form-control" type="month" value="@_selectedMonthValue" required />
+            </div>
+            <div class="col-12 col-md-auto">
+                <button type="submit" class="btn btn-primary">Update report</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="card shadow-sm">
+    <div class="card-body">
+        <h2 class="h5 card-title">Spending vs budget</h2>
+        <p class="text-body-secondary">Categorized posted transactions compared with planned allocations for @_selectedMonthValue.</p>
+
+        @if (_report is null)
+        {
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-md-3"><strong>Budgeted:</strong> —</div>
+                <div class="col-12 col-md-3"><strong>Spent:</strong> —</div>
+                <div class="col-12 col-md-3"><strong>Remaining:</strong> —</div>
+                <div class="col-12 col-md-3"><strong>Uncategorized:</strong> —</div>
+            </div>
+            <p class="mb-0">No report is available yet.</p>
+        }
+        else
+        {
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-md-3"><strong>Budgeted:</strong> @FormatCurrency(_report.TotalBudgeted)</div>
+                <div class="col-12 col-md-3"><strong>Spent:</strong> @FormatCurrency(_report.TotalSpent)</div>
+                <div class="col-12 col-md-3"><strong>Remaining:</strong> @FormatCurrency(_report.TotalRemaining)</div>
+                <div class="col-12 col-md-3"><strong>Uncategorized:</strong> @FormatCurrency(_report.UncategorizedSpent)</div>
+            </div>
+
+            @if (_report.UncategorizedSpent != 0)
+            {
+                <div class="alert alert-info" role="status">
+                    Categorize transactions from the budget page to include this @FormatCurrency(_report.UncategorizedSpent) in category reports.
+                </div>
+            }
+
+            @if (_report.Groups.Count == 0)
+            {
+                <p class="mb-0">No budget allocations or categorized spending exist for this month.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th class="text-end">Budgeted</th>
+                                <th class="text-end">Spent</th>
+                                <th class="text-end">Remaining</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var group in _report.Groups)
+                            {
+                                <tr class="table-light">
+                                    <th>@group.GroupName</th>
+                                    <th class="text-end">@FormatCurrency(group.Budgeted)</th>
+                                    <th class="text-end">@FormatCurrency(group.Spent)</th>
+                                    <th class="text-end">@FormatCurrency(group.Remaining)</th>
+                                </tr>
+                                @foreach (var category in group.Categories)
+                                {
+                                    var rowClass = category.Remaining < 0 ? "table-warning" : string.Empty;
+                                    <tr class="@rowClass">
+                                        <td>@category.CategoryName</td>
+                                        <td class="text-end">@FormatCurrency(category.Budgeted)</td>
+                                        <td class="text-end">@FormatCurrency(category.Spent)</td>
+                                        <td class="text-end">@FormatCurrency(category.Remaining)</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "month")]
+    public string? Month { get; set; }
+
+    private MonthlySpendingReport? _report;
+    private string? _loadError;
+    private string _selectedMonthValue = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM", CultureInfo.InvariantCulture);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            var selectedMonth = ParseMonthOrDefault(Month);
+            _selectedMonthValue = selectedMonth.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+            _report = await SpendingReportService.GetMonthlyReportAsync(selectedMonth, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+    }
+
+    private static DateOnly ParseMonthOrDefault(string? month)
+    {
+        if (DateOnly.TryParseExact(month + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var selectedMonth))
+        {
+            return selectedMonth;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        return new DateOnly(today.Year, today.Month, 1);
+    }
+
+    private static string FormatCurrency(decimal amount) =>
+        amount.ToString("C", CultureInfo.GetCultureInfo("en-US"));
+}

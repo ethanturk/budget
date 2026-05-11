@@ -1,0 +1,231 @@
+@page "/"
+@using System.Globalization
+@using BudgetApp.Infrastructure.Reporting
+@inject DashboardQueryService DashboardQueryService
+
+<PageTitle>Budget Dashboard</PageTitle>
+
+<h1>Budget Dashboard</h1>
+
+<p class="lead">Track balances, review recent activity, and keep your monthly plan on course.</p>
+
+@if (!string.IsNullOrWhiteSpace(_loadError))
+{
+    <div class="alert alert-warning" role="alert">
+        Dashboard data is temporarily unavailable. You can still connect an institution or sign in again after the database is available.
+    </div>
+}
+
+@if (_dashboard is null)
+{
+    <p>Loading dashboard…</p>
+}
+else
+{
+    <div class="row g-4 mt-1">
+        <div class="col-12 col-lg-4">
+            <section class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h5 card-title">Connected institutions</h2>
+                    <p class="text-body-secondary">SimpleFIN connections currently available for import.</p>
+
+                    @if (_dashboard.ConnectionCount == 0)
+                    {
+                        <p class="mb-0">No institutions connected yet.</p>
+                        <a class="btn btn-primary mt-3" href="/simplefin/connect">Connect your first institution</a>
+                    }
+                    else
+                    {
+                        <ul class="list-unstyled mb-0">
+                            @foreach (var connection in _dashboard.Connections)
+                            {
+                                <li class="border rounded p-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                        <div>
+                                            <div class="fw-semibold">@connection.InstitutionName</div>
+                                            <div class="text-body-secondary small">@connection.AccountCount account(s) • @connection.Status</div>
+                                            <div class="small mt-1">Current balance: @FormatCurrency(connection.CurrentBalance)</div>
+                                            @if (connection.LastSuccessfulSyncAt is not null)
+                                            {
+                                                <div class="small text-success">Last successful sync: @FormatDateTime(connection.LastSuccessfulSyncAt.Value)</div>
+                                            }
+                                            else if (connection.LastAttemptedSyncAt is not null)
+                                            {
+                                                <div class="small text-warning">Last attempted sync: @FormatDateTime(connection.LastAttemptedSyncAt.Value)</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(connection.LastError))
+                                            {
+                                                <div class="small text-danger">@connection.LastError</div>
+                                            }
+                                        </div>
+
+                                        <form method="post" action="/simplefin/sync/@connection.ConnectionId">
+                                            <button type="submit" class="btn btn-outline-primary btn-sm">Sync now</button>
+                                        </form>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+
+                        <a class="btn btn-outline-primary" href="/simplefin/connect">Connect another institution</a>
+                    }
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <section class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h5 card-title">Budget health</h2>
+                    <p class="text-body-secondary">A quick snapshot of assigned funds and synced cash on hand.</p>
+                    <ul class="mb-0">
+                        <li>Connected institutions: @_dashboard.InstitutionCount</li>
+                        <li>Tracked accounts: @_dashboard.AccountCount</li>
+                        <li>Total current balance: @FormatCurrency(_dashboard.TotalCurrentBalance)</li>
+                        <li>Budget month: @(_dashboard.Budget.Month?.ToString("yyyy-MM") ?? "Not started")</li>
+                        <li>Total budgeted: @FormatCurrency(_dashboard.Budget.TotalBudgeted)</li>
+                        <li>Budget groups: @_dashboard.Budget.BudgetGroupCount</li>
+                        <li>Budget categories: @_dashboard.Budget.BudgetCategoryCount</li>
+                    </ul>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <section class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h5 card-title">Sync status</h2>
+                    <p class="text-body-secondary">Latest import run across all linked connections.</p>
+                    @if (_dashboard.LatestSync is null)
+                    {
+                        <p class="mb-0">No syncs have run yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="mb-0">
+                            <li>Status: @_dashboard.LatestSync.Status</li>
+                            <li>Started: @FormatDateTime(_dashboard.LatestSync.StartedAt)</li>
+                            <li>Accounts seen: @_dashboard.LatestSync.AccountsSeen</li>
+                            <li>Transactions seen: @_dashboard.LatestSync.TransactionsSeen</li>
+                            <li>Inserted: @_dashboard.LatestSync.TransactionsInserted</li>
+                            <li>Updated: @_dashboard.LatestSync.TransactionsUpdated</li>
+                        </ul>
+
+                        @if (!string.IsNullOrWhiteSpace(_dashboard.LatestSync.ErrorText))
+                        {
+                            <p class="text-danger mt-3 mb-0">@_dashboard.LatestSync.ErrorText</p>
+                        }
+                    }
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-xl-7">
+            <section class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h5 card-title">Recent transactions</h2>
+                    <p class="text-body-secondary">Most recently imported activity from your connected accounts.</p>
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Date</th>
+                                    <th scope="col">Description</th>
+                                    <th scope="col">Account</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col" class="text-end">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (_dashboard.RecentTransactions.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="5" class="text-body-secondary">No transactions imported yet.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var transaction in _dashboard.RecentTransactions)
+                                    {
+                                        <tr>
+                                            <td>@transaction.PostedAt.ToString("yyyy-MM-dd")</td>
+                                            <td>@transaction.Description</td>
+                                            <td>@transaction.AccountName</td>
+                                            <td>@(transaction.IsPending ? "Pending" : "Posted")</td>
+                                            <td class="text-end @(transaction.Amount < 0 ? "text-danger" : "text-success")">@FormatCurrency(transaction.Amount)</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-xl-5">
+            <section class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h5 card-title">Recent sync activity</h2>
+                    <p class="text-body-secondary">The most recent import attempts across your linked SimpleFIN connections.</p>
+
+                    @if (_dashboard.RecentSyncRuns.Count == 0)
+                    {
+                        <p class="mb-0">No sync attempts have been recorded yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-unstyled mb-0">
+                            @foreach (var run in _dashboard.RecentSyncRuns)
+                            {
+                                <li class="border rounded p-3 mb-3">
+                                    <div class="fw-semibold">@run.Status</div>
+                                    <div class="small text-body-secondary">Started @FormatDateTime(run.StartedAt)</div>
+                                    <div class="small">Accounts: @run.AccountsSeen • Transactions: @run.TransactionsSeen</div>
+                                    <div class="small">Inserted: @run.TransactionsInserted • Updated: @run.TransactionsUpdated</div>
+                                    @if (!string.IsNullOrWhiteSpace(run.ErrorText))
+                                    {
+                                        <div class="small text-danger mt-1">@run.ErrorText</div>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </section>
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardViewModel? _dashboard;
+    private string? _loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _dashboard = await DashboardQueryService.GetDashboardAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+            _dashboard = new DashboardViewModel(
+                0,
+                0,
+                0,
+                0m,
+                new DashboardBudgetSummary(null, 0m, 0, 0),
+                null,
+                Array.Empty<DashboardConnectionSummary>(),
+                Array.Empty<DashboardRecentTransaction>(),
+                Array.Empty<DashboardSyncSummary>());
+        }
+    }
+
+    private static string FormatCurrency(decimal amount) =>
+        amount.ToString("C", CultureInfo.GetCultureInfo("en-US"));
+
+    private static string FormatDateTime(DateTimeOffset value) =>
+        value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+}
