@@ -32,7 +32,14 @@ public sealed record MonthlySpendingCategory(
     decimal Spent,
     decimal Remaining,
     decimal PercentSpent,
-    SpendingStatus Status);
+    SpendingStatus Status,
+    IReadOnlyList<MonthlySpendingTransaction> Transactions);
+
+public sealed record MonthlySpendingTransaction(
+    DateTimeOffset PostedAt,
+    string Description,
+    decimal Amount,
+    string AccountName);
 
 public sealed class SpendingReportService
 {
@@ -73,6 +80,11 @@ public sealed class SpendingReportService
             .Select(x => new
             {
                 x.CategoryId,
+                x.PostedAt,
+                x.ImportedAt,
+                x.Description,
+                x.Amount,
+                AccountName = x.Account.Name,
                 SpendingAmount = -x.Amount,
                 GroupName = x.Category == null ? null : x.Category.CategoryGroup.Name,
                 GroupSortIndex = x.Category == null ? 0 : x.Category.CategoryGroup.SortIndex,
@@ -119,6 +131,21 @@ public sealed class SpendingReportService
                 }))
             .ToList();
 
+        var transactionsByCategory = spendingRows
+            .Where(x => x.CategoryId.HasValue)
+            .GroupBy(x => x.CategoryId!.Value)
+            .ToDictionary(
+                x => x.Key,
+                x => (IReadOnlyList<MonthlySpendingTransaction>)x
+                    .OrderByDescending(row => row.PostedAt)
+                    .ThenByDescending(row => row.ImportedAt)
+                    .Select(row => new MonthlySpendingTransaction(
+                        row.PostedAt,
+                        row.Description,
+                        row.Amount,
+                        row.AccountName))
+                    .ToList());
+
         var groups = categories
             .GroupBy(x => new { x.GroupName, x.GroupSortIndex })
             .OrderBy(x => x.Key.GroupSortIndex)
@@ -140,7 +167,8 @@ public sealed class SpendingReportService
                             x.Spent,
                             remaining,
                             percentSpent,
-                            DetermineStatus(percentSpent));
+                            DetermineStatus(percentSpent),
+                            transactionsByCategory.GetValueOrDefault(x.CategoryId) ?? []);
                     })
                     .ToList();
                 var budgeted = groupCategories.Sum(x => x.Budgeted);

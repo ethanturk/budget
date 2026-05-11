@@ -106,10 +106,50 @@
                                         <td>@category.CategoryName</td>
                                         <td class="text-end">@FormatCurrency(category.Budgeted)</td>
                                         <td class="text-end">@FormatCurrency(category.Spent)</td>
-                                        <td class="text-end">@category.PercentSpent.ToString("0.##", CultureInfo.InvariantCulture)%</td>
+                                        <td class="text-end">
+                                            <div class="d-flex flex-column gap-1 align-items-end">
+                                                <span>@category.PercentSpent.ToString("0.##", CultureInfo.InvariantCulture)%</span>
+                                                <div class="progress w-100" style="max-width: 8rem; height: .5rem;" role="progressbar" aria-label="@category.CategoryName spending progress" aria-valuenow="@ProgressValue(category.PercentSpent)" aria-valuemin="0" aria-valuemax="100">
+                                                    <div class="progress-bar @GetStatusProgressClass(category.Status)" style="width: @ProgressValue(category.PercentSpent)%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
                                         <td class="text-end">@FormatCurrency(category.Remaining)</td>
                                         <td><span class="badge @GetStatusBadgeClass(category.Status)">@GetStatusLabel(category.Status)</span></td>
                                     </tr>
+                                    @if (category.Transactions.Count > 0)
+                                    {
+                                        <tr>
+                                            <td colspan="6" class="bg-body-tertiary">
+                                                <details>
+                                                    <summary class="fw-semibold">View @category.Transactions.Count transaction@(category.Transactions.Count == 1 ? string.Empty : "s") for @category.CategoryName</summary>
+                                                    <div class="table-responsive mt-2">
+                                                        <table class="table table-sm mb-0">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Date</th>
+                                                                    <th>Description</th>
+                                                                    <th>Account</th>
+                                                                    <th class="text-end">Amount</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach (var transaction in category.Transactions)
+                                                                {
+                                                                    <tr>
+                                                                        <td>@transaction.PostedAt.ToString("yyyy-MM-dd")</td>
+                                                                        <td>@transaction.Description</td>
+                                                                        <td>@transaction.AccountName</td>
+                                                                        <td class="text-end @(transaction.Amount < 0 ? "text-danger" : "text-success")">@FormatCurrency(transaction.Amount)</td>
+                                                                    </tr>
+                                                                }
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </details>
+                                            </td>
+                                        </tr>
+                                    }
                                 }
                             }
                         </tbody>
@@ -181,4 +221,14 @@
         SpendingStatus.OverBudget => "text-bg-danger",
         _ => "text-bg-success"
     };
+
+    private static string GetStatusProgressClass(SpendingStatus status) => status switch
+    {
+        SpendingStatus.OnTrack => "bg-success",
+        SpendingStatus.NearLimit => "bg-warning",
+        SpendingStatus.OverBudget => "bg-danger",
+        _ => "bg-success"
+    };
+
+    private static decimal ProgressValue(decimal percentSpent) => Math.Clamp(percentSpent, 0m, 100m);
 }

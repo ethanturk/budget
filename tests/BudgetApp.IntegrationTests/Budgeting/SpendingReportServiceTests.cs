@@ -80,6 +80,7 @@ public sealed class SpendingReportServiceTests
         var options = CreateOptions();
         await using var dbContext = new BudgetAppDbContext(options);
         var dining = await SeedCategoryAsync(dbContext, "Food", "Dining");
+        var fuel = await SeedCategoryAsync(dbContext, "Transportation", "Fuel");
         var month = new BudgetMonth
         {
             Id = Guid.NewGuid(),
@@ -88,30 +89,89 @@ public sealed class SpendingReportServiceTests
             UpdatedAt = DateTimeOffset.UtcNow
         };
         dbContext.BudgetMonths.Add(month);
-        dbContext.BudgetAllocations.Add(new BudgetAllocation
-        {
-            Id = Guid.NewGuid(),
-            BudgetMonthId = month.Id,
-            CategoryId = dining.Id,
-            Amount = 100m,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+        dbContext.BudgetAllocations.AddRange(
+            new BudgetAllocation
+            {
+                Id = Guid.NewGuid(),
+                BudgetMonthId = month.Id,
+                CategoryId = dining.Id,
+                Amount = 100m,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            },
+            new BudgetAllocation
+            {
+                Id = Guid.NewGuid(),
+                BudgetMonthId = month.Id,
+                CategoryId = fuel.Id,
+                Amount = 100m,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
         var account = await SeedAccountAsync(dbContext);
-        dbContext.Transactions.Add(BuildTransaction(
-            account.Id,
-            dining.Id,
-            new DateTimeOffset(2026, 5, 8, 0, 0, 0, TimeSpan.Zero),
-            -125m,
-            "Restaurant"));
+        dbContext.Transactions.AddRange(
+            BuildTransaction(
+                account.Id,
+                dining.Id,
+                new DateTimeOffset(2026, 5, 8, 0, 0, 0, TimeSpan.Zero),
+                -125m,
+                "Restaurant"),
+            BuildTransaction(
+                account.Id,
+                fuel.Id,
+                new DateTimeOffset(2026, 5, 9, 0, 0, 0, TimeSpan.Zero),
+                -90m,
+                "Gas station"));
         await dbContext.SaveChangesAsync();
         var service = new SpendingReportService(dbContext);
 
         var report = await service.GetMonthlyReportAsync(new DateOnly(2026, 5, 1), CancellationToken.None);
 
-        var category = Assert.Single(report.Groups.Single(x => x.GroupName == "Food").Categories);
-        Assert.Equal(125m, category.PercentSpent);
-        Assert.Equal(SpendingStatus.OverBudget, category.Status);
+        var diningCategory = Assert.Single(report.Groups.Single(x => x.GroupName == "Food").Categories);
+        Assert.Equal(125m, diningCategory.PercentSpent);
+        Assert.Equal(SpendingStatus.OverBudget, diningCategory.Status);
+
+        var fuelCategory = Assert.Single(report.Groups.Single(x => x.GroupName == "Transportation").Categories);
+        Assert.Equal(90m, fuelCategory.PercentSpent);
+        Assert.Equal(SpendingStatus.NearLimit, fuelCategory.Status);
+    }
+
+    [Fact]
+    public async Task GetMonthlyReportAsync_IncludesPostedCategoryTransactionsForDrilldown()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        var groceries = await SeedCategoryAsync(dbContext, "Food", "Groceries");
+        var dining = await SeedCategoryAsync(dbContext, "Food", "Dining");
+        var account = await SeedAccountAsync(dbContext);
+        dbContext.Transactions.AddRange(
+            BuildTransaction(account.Id, groceries.Id, new DateTimeOffset(2026, 5, 10, 0, 0, 0, TimeSpan.Zero), -30m, "Grocery store"),
+            BuildTransaction(account.Id, groceries.Id, new DateTimeOffset(2026, 5, 11, 0, 0, 0, TimeSpan.Zero), -12.34m, "Farmers market"),
+            BuildTransaction(account.Id, groceries.Id, new DateTimeOffset(2026, 5, 12, 0, 0, 0, TimeSpan.Zero), -99m, "Pending grocery", isPending: true),
+            BuildTransaction(account.Id, groceries.Id, new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero), -45m, "June grocery"),
+            BuildTransaction(account.Id, dining.Id, new DateTimeOffset(2026, 5, 13, 0, 0, 0, TimeSpan.Zero), -20m, "Restaurant"));
+        await dbContext.SaveChangesAsync();
+        var service = new SpendingReportService(dbContext);
+
+        var report = await service.GetMonthlyReportAsync(new DateOnly(2026, 5, 1), CancellationToken.None);
+
+        var category = report.Groups.SelectMany(x => x.Categories).Single(x => x.CategoryName == "Groceries");
+        Assert.Equal(2, category.Transactions.Count);
+        Assert.Collection(category.Transactions,
+            transaction =>
+            {
+                Assert.Equal(new DateTimeOffset(2026, 5, 11, 0, 0, 0, TimeSpan.Zero), transaction.PostedAt);
+                Assert.Equal("Farmers market", transaction.Description);
+                Assert.Equal(-12.34m, transaction.Amount);
+                Assert.Equal("Checking", transaction.AccountName);
+            },
+            transaction =>
+            {
+                Assert.Equal(new DateTimeOffset(2026, 5, 10, 0, 0, 0, TimeSpan.Zero), transaction.PostedAt);
+                Assert.Equal("Grocery store", transaction.Description);
+                Assert.Equal(-30m, transaction.Amount);
+                Assert.Equal("Checking", transaction.AccountName);
+            });
     }
 
     private static async Task<Category> SeedCategoryAsync(BudgetAppDbContext dbContext, string groupName, string categoryName)
@@ -174,7 +234,8 @@ public sealed class SpendingReportServiceTests
         Guid? categoryId,
         DateTimeOffset postedAt,
         decimal amount,
-        string description) => new()
+        string description,
+        bool isPending = false) => new()
         {
             Id = Guid.NewGuid(),
             AccountId = accountId,
@@ -185,6 +246,7 @@ public sealed class SpendingReportServiceTests
             PostedAt = postedAt,
             Amount = amount,
             Description = description,
+            IsPending = isPending,
             ImportedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
