@@ -1,5 +1,6 @@
 using BudgetApp.Domain.Entities;
 using BudgetApp.Infrastructure.Budgeting;
+using BudgetApp.Infrastructure.Budgeting.Rules;
 using BudgetApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,6 +36,94 @@ public sealed class AutoCategorizationServiceTests
         Assert.Null(await dbContext.Transactions.Where(x => x.Id == inactiveRuleMatch.Id).Select(x => x.CategoryId).SingleAsync());
         Assert.Equal(dining.Id, await dbContext.Transactions.Where(x => x.Id == alreadyCategorized.Id).Select(x => x.CategoryId).SingleAsync());
         Assert.Null(await dbContext.Transactions.Where(x => x.Id == pending.Id).Select(x => x.CategoryId).SingleAsync());
+    }
+
+    [Fact]
+    public async Task ApplyRulesAsync_AssignsRuleWhenExpressionMatchesPayeeAndAmount()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        var fees = await SeedCategoryAsync(dbContext, "Debt", "Interest");
+        var account = await SeedAccountAsync(dbContext);
+        dbContext.CategoryRules.Add(BuildExpressionRule(
+            fees.Id,
+            new CategoryRuleDefinition(new RuleGroupNode(
+                RuleLogicalOperator.And,
+                [
+                    new RuleConditionNode(RuleField.Payee, RuleComparison.Equals, "Interest Charge"),
+                    new RuleConditionNode(RuleField.Amount, RuleComparison.LessThan, "0")
+                ]))));
+        var matching = BuildTransaction(
+            account.Id,
+            "INTEREST CHARGED ON PURCHASES",
+            -701.91m,
+            payee: "Interest Charge");
+        dbContext.Transactions.Add(matching);
+        await dbContext.SaveChangesAsync();
+
+        var service = new AutoCategorizationService(dbContext);
+
+        var result = await service.ApplyRulesAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.CategorizedCount);
+        Assert.Equal(fees.Id, await dbContext.Transactions.Where(x => x.Id == matching.Id).Select(x => x.CategoryId).SingleAsync());
+    }
+
+    [Fact]
+    public async Task ApplyRulesAsync_DoesNotAssignRuleWhenExpressionConditionFails()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        var fees = await SeedCategoryAsync(dbContext, "Debt", "Interest");
+        var account = await SeedAccountAsync(dbContext);
+        dbContext.CategoryRules.Add(BuildExpressionRule(
+            fees.Id,
+            new CategoryRuleDefinition(new RuleGroupNode(
+                RuleLogicalOperator.And,
+                [
+                    new RuleConditionNode(RuleField.Payee, RuleComparison.Equals, "Interest Charge"),
+                    new RuleConditionNode(RuleField.Amount, RuleComparison.LessThan, "0")
+                ]))));
+        var nonMatching = BuildTransaction(
+            account.Id,
+            "INTEREST CREDIT",
+            12.34m,
+            payee: "Interest Charge");
+        dbContext.Transactions.Add(nonMatching);
+        await dbContext.SaveChangesAsync();
+
+        var service = new AutoCategorizationService(dbContext);
+
+        var result = await service.ApplyRulesAsync(CancellationToken.None);
+
+        Assert.Equal(0, result.CategorizedCount);
+        Assert.Null(await dbContext.Transactions.Where(x => x.Id == nonMatching.Id).Select(x => x.CategoryId).SingleAsync());
+    }
+
+    [Fact]
+    public async Task ApplyRulesAsync_AssignsRuleWhenMemoContainsText()
+    {
+        var options = CreateOptions();
+        await using var dbContext = new BudgetAppDbContext(options);
+        var business = await SeedCategoryAsync(dbContext, "Business", "Supplies");
+        var account = await SeedAccountAsync(dbContext);
+        dbContext.CategoryRules.Add(BuildExpressionRule(
+            business.Id,
+            new CategoryRuleDefinition(new RuleConditionNode(RuleField.Memo, RuleComparison.Contains, "invoice"))));
+        var matching = BuildTransaction(
+            account.Id,
+            "CARD PURCHASE",
+            -42.00m,
+            memo: "Invoice 1234");
+        dbContext.Transactions.Add(matching);
+        await dbContext.SaveChangesAsync();
+
+        var service = new AutoCategorizationService(dbContext);
+
+        var result = await service.ApplyRulesAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.CategorizedCount);
+        Assert.Equal(business.Id, await dbContext.Transactions.Where(x => x.Id == matching.Id).Select(x => x.CategoryId).SingleAsync());
     }
 
     [Fact]
@@ -88,6 +177,7 @@ public sealed class AutoCategorizationServiceTests
                 Assert.Equal("Food", rule.GroupName);
                 Assert.Equal("Groceries", rule.CategoryName);
                 Assert.Equal("KROGER", rule.MatchText);
+                Assert.Equal("Description contains \"KROGER\" OR Payee contains \"KROGER\" OR Memo contains \"KROGER\"", rule.DisplayText);
                 Assert.True(rule.IsActive);
             },
             rule =>
@@ -95,6 +185,7 @@ public sealed class AutoCategorizationServiceTests
                 Assert.Equal("Utilities", rule.GroupName);
                 Assert.Equal("Gas", rule.CategoryName);
                 Assert.Equal("GIBSONCOUNT", rule.MatchText);
+                Assert.Equal("Description contains \"GIBSONCOUNT\" OR Payee contains \"GIBSONCOUNT\" OR Memo contains \"GIBSONCOUNT\"", rule.DisplayText);
                 Assert.False(rule.IsActive);
             });
     }
@@ -122,6 +213,17 @@ public sealed class AutoCategorizationServiceTests
         Id = Guid.NewGuid(),
         CategoryId = categoryId,
         MatchText = matchText,
+        IsActive = isActive,
+        CreatedAt = DateTimeOffset.UtcNow,
+        UpdatedAt = DateTimeOffset.UtcNow
+    };
+
+    private static CategoryRule BuildExpressionRule(Guid categoryId, CategoryRuleDefinition definition, bool isActive = true) => new()
+    {
+        Id = Guid.NewGuid(),
+        CategoryId = categoryId,
+        RuleJson = CategoryRuleDefinitionSerializer.Serialize(definition),
+        DisplayText = CategoryRuleDisplayFormatter.Format(definition),
         IsActive = isActive,
         CreatedAt = DateTimeOffset.UtcNow,
         UpdatedAt = DateTimeOffset.UtcNow
@@ -186,7 +288,14 @@ public sealed class AutoCategorizationServiceTests
         return account;
     }
 
-    private static Transaction BuildTransaction(Guid accountId, string description, decimal amount, Guid? categoryId = null, bool isPending = false) => new()
+    private static Transaction BuildTransaction(
+        Guid accountId,
+        string description,
+        decimal amount,
+        Guid? categoryId = null,
+        bool isPending = false,
+        string? payee = null,
+        string? memo = null) => new()
     {
         Id = Guid.NewGuid(),
         AccountId = accountId,
@@ -197,6 +306,8 @@ public sealed class AutoCategorizationServiceTests
         PostedAt = DateTimeOffset.UtcNow,
         Amount = amount,
         Description = description,
+        Payee = payee,
+        Memo = memo,
         IsPending = isPending,
         ImportedAt = DateTimeOffset.UtcNow,
         UpdatedAt = DateTimeOffset.UtcNow

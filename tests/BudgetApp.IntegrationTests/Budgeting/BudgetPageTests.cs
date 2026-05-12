@@ -1,4 +1,6 @@
 using System.Net;
+using BudgetApp.Domain.Entities;
+using BudgetApp.Infrastructure.Budgeting.Rules;
 using BudgetApp.Infrastructure.Persistence;
 using BudgetApp.Web.Components;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -129,7 +131,7 @@ public sealed class BudgetPageTests : IClassFixture<WebApplicationFactory<App>>
     }
 
     [Fact]
-    public async Task PostAutoCategorizationRule_WithMissingMatchText_ReturnsBadRequest()
+    public async Task PostAutoCategorizationRule_WithMissingCondition_ReturnsBadRequest()
     {
         using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
@@ -143,14 +145,54 @@ public sealed class BudgetPageTests : IClassFixture<WebApplicationFactory<App>>
         request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["categoryId"] = Guid.NewGuid().ToString(),
-            ["matchText"] = ""
+            ["logicalOperator"] = "And",
+            ["field1"] = "",
+            ["comparison1"] = "Contains",
+            ["value1"] = ""
         });
 
         using var response = await client.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("Rule match text is required.", body);
+        Assert.Contains("At least one rule condition is required.", body);
+    }
+
+    [Fact]
+    public async Task PostAutoCategorizationRule_WithExpressionForm_CreatesRule()
+    {
+        await using var factory = CreateFactoryWithInMemoryDatabase();
+        var categoryId = await SeedCategoryAsync(factory);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        var authCookie = await SignInAsync(client);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/budget/category-rules");
+        request.Headers.Add("Cookie", authCookie);
+        request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["categoryId"] = categoryId.ToString(),
+            ["logicalOperator"] = "And",
+            ["field1"] = "Payee",
+            ["comparison1"] = "Equals",
+            ["value1"] = "Interest Charge",
+            ["field2"] = "Amount",
+            ["comparison2"] = "LessThan",
+            ["value2"] = "0"
+        });
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BudgetAppDbContext>();
+        var rule = await dbContext.CategoryRules.SingleAsync();
+        Assert.Equal("Payee equals \"Interest Charge\" AND Amount < 0", rule.DisplayText);
+        Assert.Contains("Interest Charge", rule.RuleJson);
+        var definition = CategoryRuleDefinitionSerializer.Deserialize(rule.RuleJson);
+        Assert.Equal(rule.DisplayText, CategoryRuleDisplayFormatter.Format(definition));
     }
 
     [Fact]
@@ -193,22 +235,55 @@ public sealed class BudgetPageTests : IClassFixture<WebApplicationFactory<App>>
         Assert.Contains("Category is required.", body);
     }
 
-    private HttpClient CreateClientWithInMemoryDatabase()
+    private WebApplicationFactory<App> CreateFactoryWithInMemoryDatabase()
     {
-        var factory = _factory.WithWebHostBuilder(builder =>
+        var databaseName = Guid.NewGuid().ToString();
+        return _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<DbContextOptions<BudgetAppDbContext>>();
                 services.AddDbContext<BudgetAppDbContext>(options =>
-                    options.UseInMemoryDatabase(Guid.NewGuid().ToString()));
+                    options.UseInMemoryDatabase(databaseName));
             });
         });
+    }
+
+    private HttpClient CreateClientWithInMemoryDatabase()
+    {
+        var factory = CreateFactoryWithInMemoryDatabase();
 
         return factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false
         });
+    }
+
+    private static async Task<Guid> SeedCategoryAsync(WebApplicationFactory<App> factory)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BudgetAppDbContext>();
+        var group = new CategoryGroup
+        {
+            Id = Guid.NewGuid(),
+            Name = "Debt",
+            SortIndex = 1,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        var category = new Category
+        {
+            Id = Guid.NewGuid(),
+            CategoryGroupId = group.Id,
+            Name = "Interest",
+            SortIndex = 1,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        dbContext.CategoryGroups.Add(group);
+        dbContext.Categories.Add(category);
+        await dbContext.SaveChangesAsync();
+        return category.Id;
     }
 
     private static async Task<string> SignInAsync(HttpClient client)

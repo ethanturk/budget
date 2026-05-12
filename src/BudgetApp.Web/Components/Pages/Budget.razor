@@ -181,26 +181,69 @@
                 }
                 else
                 {
-                    <form method="post" action="/budget/category-rules" class="row g-3 align-items-end mb-3">
-                        <div class="col-12 col-lg-5">
-                            <label class="form-label" for="ruleCategoryId">Category</label>
-                            <select id="ruleCategoryId" name="categoryId" class="form-select" required>
-                                <option value="">Choose category</option>
-                                @foreach (var group in _catalog.Groups)
-                                {
-                                    @foreach (var category in group.Categories)
+                    <form method="post" action="/budget/category-rules" class="mb-3">
+                        <div class="row g-3 align-items-end mb-3">
+                            <div class="col-12 col-lg-5">
+                                <label class="form-label" for="ruleCategoryId">Category</label>
+                                <select id="ruleCategoryId" name="categoryId" class="form-select" required>
+                                    <option value="">Choose category</option>
+                                    @foreach (var group in _catalog.Groups)
                                     {
-                                        <option value="@category.CategoryId">@group.GroupName — @category.CategoryName</option>
+                                        @foreach (var category in group.Categories)
+                                        {
+                                            <option value="@category.CategoryId">@group.GroupName — @category.CategoryName</option>
+                                        }
                                     }
-                                }
-                            </select>
+                                </select>
+                            </div>
+                            <div class="col-12 col-lg-3">
+                                <label class="form-label" for="logicalOperator">Match conditions with</label>
+                                <select id="logicalOperator" name="logicalOperator" class="form-select">
+                                    <option value="And">All conditions (AND)</option>
+                                    <option value="Or">Any condition (OR)</option>
+                                </select>
+                            </div>
+                            <div class="col-12 col-lg-4">
+                                <button type="submit" class="btn btn-outline-primary w-100">Save rule</button>
+                            </div>
                         </div>
-                        <div class="col-12 col-lg-5">
-                            <label class="form-label" for="matchText">Description contains</label>
-                            <input id="matchText" name="matchText" class="form-control" type="text" placeholder="KROGER" required />
-                        </div>
-                        <div class="col-12 col-lg-2">
-                            <button type="submit" class="btn btn-outline-primary w-100">Save rule</button>
+
+                        <div class="vstack gap-2">
+                            @for (var conditionIndex = 1; conditionIndex <= 3; conditionIndex++)
+                            {
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label" for="field@conditionIndex">Field @conditionIndex</label>
+                                        <select id="field@conditionIndex" name="field@conditionIndex" class="form-select" required="@(conditionIndex == 1)">
+                                            <option value="">Choose field</option>
+                                            <option value="Payee">Payee</option>
+                                            <option value="Description">Description</option>
+                                            <option value="Memo">Memo</option>
+                                            <option value="Amount">Amount</option>
+                                            <option value="SpendingAmount">Spending amount</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label" for="comparison@conditionIndex">Comparison</label>
+                                        <select id="comparison@conditionIndex" name="comparison@conditionIndex" class="form-select" required="@(conditionIndex == 1)">
+                                            <option value="Contains">contains</option>
+                                            <option value="Equals">equals</option>
+                                            <option value="StartsWith">starts with</option>
+                                            <option value="EndsWith">ends with</option>
+                                            <option value="GreaterThan">&gt;</option>
+                                            <option value="GreaterThanOrEqual">&gt;=</option>
+                                            <option value="LessThan">&lt;</option>
+                                            <option value="LessThanOrEqual">&lt;=</option>
+                                            <option value="IsBlank">is blank</option>
+                                            <option value="IsNotBlank">is not blank</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label" for="value@conditionIndex">Value</label>
+                                        <input id="value@conditionIndex" name="value@conditionIndex" class="form-control" type="text" placeholder="Kroger or 25.00" />
+                                    </div>
+                                </div>
+                            }
                         </div>
                     </form>
 
@@ -220,7 +263,7 @@
                             {
                                 <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                                     <div>
-                                        <div><strong>@rule.MatchText</strong> → @rule.GroupName — @rule.CategoryName</div>
+                                        <div><strong>@rule.DisplayText</strong> → @rule.GroupName — @rule.CategoryName</div>
                                         <div class="text-body-secondary">Status: @(rule.IsActive ? "Active" : "Inactive")</div>
                                     </div>
                                     @if (rule.IsActive)

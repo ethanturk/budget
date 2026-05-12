@@ -6,6 +6,7 @@ using BudgetApp.Infrastructure;
 using BudgetApp.Infrastructure.Auth;
 using BudgetApp.Infrastructure.Budgeting;
 using BudgetApp.Infrastructure.SimpleFin;
+using BudgetApp.Web.Budgeting;
 using BudgetApp.Web.Components;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -302,21 +303,16 @@ app.MapPost("/budget/category-rules", async Task<Results<RedirectHttpResult, Con
 {
     var form = await httpContext.Request.ReadFormAsync(cancellationToken);
     var categoryValue = form["categoryId"].ToString().Trim();
-    var matchText = form["matchText"].ToString().Trim();
 
     if (!Guid.TryParse(categoryValue, out var categoryId))
     {
         return TypedResults.Content("Category is required.", "text/plain", Encoding.UTF8, StatusCodes.Status400BadRequest);
     }
 
-    if (string.IsNullOrWhiteSpace(matchText))
-    {
-        return TypedResults.Content("Rule match text is required.", "text/plain", Encoding.UTF8, StatusCodes.Status400BadRequest);
-    }
-
     try
     {
-        await autoCategorizationService.SaveRuleAsync(new SaveCategoryRuleRequest(categoryId, matchText), cancellationToken);
+        var definition = CategoryRuleFormParser.Parse(form);
+        await autoCategorizationService.SaveRuleAsync(new SaveCategoryRuleRequest(categoryId, definition), cancellationToken);
         return TypedResults.Redirect("/budget");
     }
     catch (InvalidOperationException ex)
