@@ -1,3 +1,4 @@
+using System.Reflection;
 using BudgetApp.Infrastructure.Budgeting;
 using BudgetApp.Infrastructure.Persistence;
 using BudgetApp.Infrastructure.Reporting;
@@ -25,6 +26,19 @@ public sealed class DependencyInjectionTests : IClassFixture<WebApplicationFacto
         var dbContext = scope.ServiceProvider.GetRequiredService<BudgetAppDbContext>();
 
         Assert.NotNull(dbContext);
+    }
+
+    [Fact]
+    public void AppServices_ConfigureSimpleFinHttpClientWithExtendedTimeout()
+    {
+        using var scope = _factory.Services.CreateScope();
+
+        var client = scope.ServiceProvider.GetRequiredService<SimpleFinClient>();
+        var httpClientField = typeof(SimpleFinClient).GetField("_httpClient", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("SimpleFIN client HttpClient field was not found.");
+        var httpClient = Assert.IsType<HttpClient>(httpClientField.GetValue(client));
+
+        Assert.Equal(TimeSpan.FromMinutes(10), httpClient.Timeout);
     }
 
     [Fact]

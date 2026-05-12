@@ -1,3 +1,4 @@
+using BudgetApp.Application.Configuration;
 using BudgetApp.Infrastructure.Budgeting;
 using BudgetApp.Infrastructure.Persistence;
 using BudgetApp.Infrastructure.Reporting;
@@ -5,6 +6,7 @@ using BudgetApp.Infrastructure.SimpleFin;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace BudgetApp.Infrastructure;
 
@@ -23,7 +25,11 @@ public static class DependencyInjection
             });
         });
 
-        services.AddHttpClient<SimpleFinClient>();
+        services.AddHttpClient<SimpleFinClient>((serviceProvider, httpClient) =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<BudgetAppOptions>>().Value;
+            httpClient.Timeout = TimeSpan.FromSeconds(options.SimpleFinHttpTimeoutSeconds);
+        });
         services.AddScoped<SimpleFinAccountSetImporter>();
         services.AddScoped<SimpleFinConnectionService>();
         services.AddScoped<SimpleFinSyncService>();

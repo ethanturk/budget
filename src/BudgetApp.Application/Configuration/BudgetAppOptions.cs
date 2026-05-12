@@ -12,4 +12,7 @@ public sealed class BudgetAppOptions
 
     [Range(1, 1440)]
     public int SyncIntervalMinutes { get; init; } = 15;
+
+    [Range(30, 3600)]
+    public int SimpleFinHttpTimeoutSeconds { get; init; } = 600;
 }
