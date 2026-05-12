@@ -62,6 +62,8 @@ public sealed class SimpleFinSyncServiceTests
                       "posted": 1715000000,
                       "amount": "-12.34",
                       "description": "Coffee Shop",
+                      "payee": "Coffee Shop LLC",
+                      "memo": "Latte and bagel",
                       "pending": false
                     },
                     {
@@ -104,6 +106,9 @@ public sealed class SimpleFinSyncServiceTests
 
         Assert.Equal(1, await dbContext.Accounts.CountAsync());
         Assert.Equal(2, await dbContext.Transactions.CountAsync());
+        var coffeeTransaction = await dbContext.Transactions.SingleAsync(x => x.ProviderTransactionId == "TX-1");
+        Assert.Equal("Coffee Shop LLC", coffeeTransaction.Payee);
+        Assert.Equal("Latte and bagel", coffeeTransaction.Memo);
         Assert.NotNull(requestedUri);
         Assert.Contains("version=2", requestedUri!.Query);
         Assert.Contains("start-date=", requestedUri.Query);

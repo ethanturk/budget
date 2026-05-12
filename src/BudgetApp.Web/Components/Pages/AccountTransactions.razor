@@ -64,7 +64,17 @@ else
                             {
                                 <tr>
                                     <td>@transaction.PostedAt.ToString("yyyy-MM-dd")</td>
-                                    <td>@transaction.Description</td>
+                                    <td>
+                                        <div>@(transaction.Payee ?? transaction.Description)</div>
+                                        @if (!string.Equals(transaction.Payee, transaction.Description, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <div class="small text-body-secondary">@transaction.Description</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(transaction.Memo))
+                                        {
+                                            <div class="small text-body-secondary">Memo: @transaction.Memo</div>
+                                        }
+                                    </td>
                                     <td>@(transaction.IsPending ? "Pending" : "Posted")</td>
                                     <td>@(transaction.CategoryName ?? "Uncategorized")</td>
                                     <td class="text-end @(transaction.Amount < 0 ? "text-danger" : "text-success")">@FormatCurrency(transaction.Amount)</td>

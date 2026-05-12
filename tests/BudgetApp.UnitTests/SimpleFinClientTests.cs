@@ -69,6 +69,8 @@ public sealed class SimpleFinClientTests
                           "posted": 1715000000,
                           "amount": "-12.34",
                           "description": "Coffee Shop",
+                          "payee": "Coffee Shop LLC",
+                          "memo": "Latte and bagel",
                           "pending": false
                         }
                       ]
@@ -87,6 +89,9 @@ public sealed class SimpleFinClientTests
         Assert.Single(response.Accounts);
         Assert.Equal("CHK-1", response.Accounts[0].Id);
         Assert.Single(response.Connections);
+        var transaction = Assert.Single(response.Accounts[0].Transactions!);
+        Assert.Equal("Coffee Shop LLC", transaction.Payee);
+        Assert.Equal("Latte and bagel", transaction.Memo);
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

@@ -132,7 +132,9 @@ public sealed class AutoCategorizationService
         foreach (var transaction in transactions)
         {
             var rule = rules.FirstOrDefault(x =>
-                transaction.Description.Contains(x.MatchText, StringComparison.OrdinalIgnoreCase));
+                ContainsMatch(transaction.Description, x.MatchText)
+                || ContainsMatch(transaction.Payee, x.MatchText)
+                || ContainsMatch(transaction.Memo, x.MatchText));
 
             if (rule is null)
             {
@@ -151,4 +153,7 @@ public sealed class AutoCategorizationService
 
         return new AutoCategorizationResult(matches.Count, matches);
     }
+
+    private static bool ContainsMatch(string? value, string matchText) =>
+        value?.Contains(matchText, StringComparison.OrdinalIgnoreCase) == true;
 }

@@ -38,6 +38,8 @@ public sealed record MonthlySpendingCategory(
 public sealed record MonthlySpendingTransaction(
     DateTimeOffset PostedAt,
     string Description,
+    string? Payee,
+    string? Memo,
     decimal Amount,
     string AccountName);
 
@@ -83,6 +85,8 @@ public sealed class SpendingReportService
                 x.PostedAt,
                 x.ImportedAt,
                 x.Description,
+                x.Payee,
+                x.Memo,
                 x.Amount,
                 AccountName = x.Account.Name,
                 SpendingAmount = -x.Amount,
@@ -142,6 +146,8 @@ public sealed class SpendingReportService
                     .Select(row => new MonthlySpendingTransaction(
                         row.PostedAt,
                         row.Description,
+                        row.Payee,
+                        row.Memo,
                         row.Amount,
                         row.AccountName))
                     .ToList());

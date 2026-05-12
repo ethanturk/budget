@@ -64,7 +64,11 @@ public sealed class TransactionCategorizationService
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            transactionQuery = transactionQuery.Where(x => x.Description.ToLower().Contains(searchText.ToLower()));
+            var normalizedSearchText = searchText.ToLower();
+            transactionQuery = transactionQuery.Where(x =>
+                x.Description.ToLower().Contains(normalizedSearchText)
+                || (x.Payee != null && x.Payee.ToLower().Contains(normalizedSearchText))
+                || (x.Memo != null && x.Memo.ToLower().Contains(normalizedSearchText)));
         }
 
         if (minimumAmount is not null)

@@ -13,6 +13,8 @@ public sealed record UncategorizedTransactionSummary(
     Guid TransactionId,
     DateTimeOffset PostedAt,
     string Description,
+    string? Payee,
+    string? Memo,
     decimal SpendingAmount);
 
 public sealed record TransactionCategoryOption(
@@ -47,7 +49,11 @@ public sealed class TransactionReviewService
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            transactionQuery = transactionQuery.Where(x => x.Description.ToLower().Contains(searchText.ToLower()));
+            var normalizedSearchText = searchText.ToLower();
+            transactionQuery = transactionQuery.Where(x =>
+                x.Description.ToLower().Contains(normalizedSearchText)
+                || (x.Payee != null && x.Payee.ToLower().Contains(normalizedSearchText))
+                || (x.Memo != null && x.Memo.ToLower().Contains(normalizedSearchText)));
         }
 
         if (minimumAmount is not null)
@@ -63,6 +69,8 @@ public sealed class TransactionReviewService
                 x.Id,
                 x.PostedAt,
                 x.Description,
+                x.Payee,
+                x.Memo,
                 -x.Amount))
             .ToListAsync(cancellationToken);
 

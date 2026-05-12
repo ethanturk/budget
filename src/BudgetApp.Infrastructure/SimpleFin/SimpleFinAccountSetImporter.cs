@@ -148,7 +148,9 @@ public sealed class SimpleFinAccountSetImporter
                     ? DateTimeOffset.FromUnixTimeSeconds(transactionResponse.TransactedAt.Value)
                     : null;
                 existingTransaction.Amount = ParseDecimal(transactionResponse.Amount);
-                existingTransaction.Description = transactionResponse.Description;
+                existingTransaction.Description = transactionResponse.Description.Trim();
+                existingTransaction.Payee = NormalizeOptionalText(transactionResponse.Payee);
+                existingTransaction.Memo = NormalizeOptionalText(transactionResponse.Memo);
                 existingTransaction.IsPending = transactionResponse.Pending ?? false;
                 existingTransaction.UpdatedAt = importedAt;
             }
@@ -161,4 +163,10 @@ public sealed class SimpleFinAccountSetImporter
 
     private static decimal ParseDecimal(string value) =>
         decimal.Parse(value, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+
+    private static string? NormalizeOptionalText(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
 }

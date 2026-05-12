@@ -378,7 +378,15 @@
                             <form method="post" action="/budget/transactions/@transaction.TransactionId/category" class="border rounded p-3">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-lg-5">
-                                        <div class="fw-semibold">@transaction.Description</div>
+                                        <div class="fw-semibold">@(transaction.Payee ?? transaction.Description)</div>
+                                        @if (!string.Equals(transaction.Payee, transaction.Description, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <div class="small text-body-secondary">Description: @transaction.Description</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(transaction.Memo))
+                                        {
+                                            <div class="small text-body-secondary">Memo: @transaction.Memo</div>
+                                        }
                                         <div class="text-body-secondary">@transaction.PostedAt.ToString("yyyy-MM-dd") · @FormatCurrency(transaction.SpendingAmount)</div>
                                     </div>
                                     <div class="col-12 col-lg-5">

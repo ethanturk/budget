@@ -35,6 +35,8 @@ public sealed record TransactionResponse(
     [property: JsonPropertyName("posted")] long Posted,
     [property: JsonPropertyName("amount")] string Amount,
     [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("payee")] string? Payee,
+    [property: JsonPropertyName("memo")] string? Memo,
     [property: JsonPropertyName("transacted_at")] long? TransactedAt,
     [property: JsonPropertyName("pending")] bool? Pending,
     [property: JsonPropertyName("extra")] IReadOnlyDictionary<string, object?>? Extra);

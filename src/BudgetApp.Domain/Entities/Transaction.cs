@@ -12,6 +12,8 @@ public sealed class Transaction
     public decimal Amount { get; set; }
     public Guid? CategoryId { get; set; }
     public string Description { get; set; } = string.Empty;
+    public string? Payee { get; set; }
+    public string? Memo { get; set; }
     public bool IsPending { get; set; }
     public DateTimeOffset ImportedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

@@ -40,13 +40,16 @@ public sealed class SimpleFinAccountSetImporterTests
                 "1234.56",
                 "1200.00",
                 1_715_000_000,
-                [new TransactionResponse("TX-1", 1_715_000_000, "-12.34", "Coffee Shop", null, false, null)])]);
+                [new TransactionResponse("TX-1", 1_715_000_000, "-12.34", "Coffee Shop", "Coffee Shop LLC", "Latte and bagel", null, false, null)])]);
 
         await importer.ImportAsync(connectionId, payload, CancellationToken.None);
         await importer.ImportAsync(connectionId, payload, CancellationToken.None);
 
         Assert.Equal(1, await dbContext.Accounts.CountAsync());
         Assert.Equal(1, await dbContext.Transactions.CountAsync());
+        var transaction = await dbContext.Transactions.SingleAsync();
+        Assert.Equal("Coffee Shop LLC", transaction.Payee);
+        Assert.Equal("Latte and bagel", transaction.Memo);
         Assert.Equal(1, await dbContext.AccountBalanceSnapshots.CountAsync());
         Assert.Equal(connectionId, await dbContext.Accounts.Select(x => x.ConnectionId).SingleAsync());
     }

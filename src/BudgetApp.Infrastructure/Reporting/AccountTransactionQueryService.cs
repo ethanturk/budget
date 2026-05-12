@@ -16,6 +16,8 @@ public sealed record AccountTransactionDetail(
 public sealed record AccountTransactionListItem(
     DateTimeOffset PostedAt,
     string Description,
+    string? Payee,
+    string? Memo,
     decimal Amount,
     bool IsPending,
     string? CategoryName);
@@ -63,6 +65,8 @@ public sealed class AccountTransactionQueryService
             .Select(x => new AccountTransactionListItem(
                 x.PostedAt,
                 x.Description,
+                x.Payee,
+                x.Memo,
                 x.Amount,
                 x.IsPending,
                 x.Category != null ? x.Category.Name : null))

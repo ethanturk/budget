@@ -16,6 +16,8 @@ internal sealed class TransactionConfiguration : IEntityTypeConfiguration<Transa
         builder.Property(x => x.ProviderTransactionId).IsRequired();
         builder.Property(x => x.Amount).HasPrecision(18, 2);
         builder.Property(x => x.Description).IsRequired();
+        builder.Property(x => x.Payee);
+        builder.Property(x => x.Memo);
         builder.Property(x => x.ImportedAt).IsRequired();
         builder.Property(x => x.UpdatedAt).IsRequired();
 
