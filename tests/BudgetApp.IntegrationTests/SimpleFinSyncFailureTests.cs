@@ -1,4 +1,5 @@
 using BudgetApp.Domain.Entities;
+using BudgetApp.Infrastructure.Budgeting;
 using BudgetApp.Infrastructure.Persistence;
 using BudgetApp.Infrastructure.SimpleFin;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,8 @@ public sealed class SimpleFinSyncFailureTests
         using var httpClient = new HttpClient(new ThrowingHttpMessageHandler());
         var client = new SimpleFinClient(httpClient);
         var importer = new SimpleFinAccountSetImporter(dbContext);
-        var service = new SimpleFinSyncService(dbContext, client, importer);
+        var autoCategorizationService = new AutoCategorizationService(dbContext);
+        var service = new SimpleFinSyncService(dbContext, client, importer, autoCategorizationService);
 
         var exception = await Assert.ThrowsAsync<HttpRequestException>(() => service.RunSyncAsync(connection.Id, CancellationToken.None));
 

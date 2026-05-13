@@ -1,4 +1,5 @@
 using BudgetApp.Domain.Entities;
+using BudgetApp.Infrastructure.Budgeting;
 using BudgetApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,15 +18,18 @@ public sealed class SimpleFinSyncService
     private readonly BudgetAppDbContext _dbContext;
     private readonly SimpleFinClient _simpleFinClient;
     private readonly SimpleFinAccountSetImporter _importer;
+    private readonly AutoCategorizationService _autoCategorizationService;
 
     public SimpleFinSyncService(
         BudgetAppDbContext dbContext,
         SimpleFinClient simpleFinClient,
-        SimpleFinAccountSetImporter importer)
+        SimpleFinAccountSetImporter importer,
+        AutoCategorizationService autoCategorizationService)
     {
         _dbContext = dbContext;
         _simpleFinClient = simpleFinClient;
         _importer = importer;
+        _autoCategorizationService = autoCategorizationService;
     }
 
     public async Task<SimpleFinSyncResult> RunSyncAsync(Guid connectionId, CancellationToken cancellationToken)
@@ -54,6 +58,7 @@ public sealed class SimpleFinSyncService
         {
             var payload = await _simpleFinClient.GetAccountsAsync(connection.AccessUrlCiphertext, cancellationToken);
             var summary = await _importer.ImportAsync(connection.Id, payload, cancellationToken);
+            await _autoCategorizationService.ApplyRulesAsync(cancellationToken);
 
             syncRun.Status = "succeeded";
             syncRun.CompletedAt = DateTimeOffset.UtcNow;
