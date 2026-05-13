@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<BudgetMonthSummaryService>();
         services.AddScoped<BudgetEditorService>();
         services.AddScoped<CategoryManagementService>();
+        services.AddScoped<BudgetAppSetupService>();
         services.AddScoped<SpendingReportService>();
         services.AddScoped<TransactionCategorizationService>();
         services.AddScoped<TransactionReviewService>();

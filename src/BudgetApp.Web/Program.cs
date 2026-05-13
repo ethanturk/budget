@@ -51,6 +51,12 @@ builder.Services.AddAuthorizationBuilder()
 
 var app = builder.Build();
 
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var setupService = scope.ServiceProvider.GetRequiredService<BudgetAppSetupService>();
+    await setupService.InitializeAsync(CancellationToken.None);
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -219,7 +225,7 @@ app.MapPost("/budget/allocations", async Task<Results<RedirectHttpResult, Conten
 {
     var form = await httpContext.Request.ReadFormAsync(cancellationToken);
     var monthValue = form["month"].ToString().Trim();
-    var groupName = form["groupName"].ToString().Trim();
+    var groupName = ResolveCategoryGroupName(form);
     var categoryName = form["categoryName"].ToString().Trim();
     var amountValue = form["amount"].ToString().Trim();
 
@@ -253,7 +259,7 @@ app.MapPost("/budget/categories", async Task<Results<RedirectHttpResult, Content
     CancellationToken cancellationToken) =>
 {
     var form = await httpContext.Request.ReadFormAsync(cancellationToken);
-    var groupName = form["groupName"].ToString().Trim();
+    var groupName = ResolveCategoryGroupName(form);
     var categoryName = form["categoryName"].ToString().Trim();
 
     if (string.IsNullOrWhiteSpace(groupName))
@@ -438,3 +444,20 @@ app.MapRazorComponents<App>()
     .RequireAuthorization();
 
 app.Run();
+
+static string ResolveCategoryGroupName(IFormCollection form)
+{
+    var newGroupName = form["newGroupName"].ToString().Trim();
+    if (!string.IsNullOrWhiteSpace(newGroupName))
+    {
+        return newGroupName;
+    }
+
+    var selectedGroupName = form["selectedGroupName"].ToString().Trim();
+    if (!string.IsNullOrWhiteSpace(selectedGroupName))
+    {
+        return selectedGroupName;
+    }
+
+    return form["groupName"].ToString().Trim();
+}

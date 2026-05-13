@@ -43,6 +43,9 @@ public sealed class BudgetPageTests : IClassFixture<WebApplicationFactory<App>>
         Assert.Contains("Category catalog", html);
         Assert.Contains("Spending vs budget", html);
         Assert.Contains("Review uncategorized transactions", html);
+        Assert.Contains("name=\"selectedGroupName\"", html);
+        Assert.Contains("Transportation", html);
+        Assert.Contains("Or add a new category group", html);
         Assert.Contains("Filter transactions", html);
         Assert.Contains("Description search", html);
         Assert.Contains("Minimum amount", html);
@@ -104,6 +107,39 @@ public sealed class BudgetPageTests : IClassFixture<WebApplicationFactory<App>>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("Category name is required.", body);
+    }
+
+    [Fact]
+    public async Task PostCategory_WithNewGroupName_CreatesNewGroupAndCategory()
+    {
+        await using var factory = CreateFactoryWithInMemoryDatabase();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+
+        var authCookie = await SignInAsync(client);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/budget/categories");
+        request.Headers.Add("Cookie", authCookie);
+        request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["selectedGroupName"] = "Transportation",
+            ["newGroupName"] = "Housing",
+            ["categoryName"] = "Rent"
+        });
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BudgetAppDbContext>();
+        var createdCategory = await dbContext.Categories
+            .Include(x => x.CategoryGroup)
+            .SingleAsync(x => x.Name == "Rent");
+
+        Assert.Equal("Housing", createdCategory.CategoryGroup.Name);
     }
 
     [Fact]

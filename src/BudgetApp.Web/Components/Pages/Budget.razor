@@ -35,7 +35,17 @@
 
                     <div>
                         <label class="form-label" for="groupName">Category group</label>
-                        <input id="groupName" name="groupName" class="form-control" type="text" placeholder="Housing" required />
+                        <select id="groupName" name="selectedGroupName" class="form-select" required>
+                            <option value="">Choose group</option>
+                            @if (_catalog is not null)
+                            {
+                                @foreach (var group in _catalog.Groups)
+                                {
+                                    <option value="@group.GroupName">@group.GroupName</option>
+                                }
+                            }
+                        </select>
+                        <div class="form-text">Need a new group? Add it in Manage categories below.</div>
                     </div>
 
                     <div>
@@ -111,12 +121,27 @@
         <section class="card shadow-sm h-100">
             <div class="card-body">
                 <h2 class="h5 card-title">Manage categories</h2>
-                <p class="text-body-secondary">Create reusable category groups and categories before assigning monthly dollars.</p>
+                <p class="text-body-secondary">Create reusable categories inside an existing group, or add a new group and its first category.</p>
 
                 <form method="post" action="/budget/categories" class="vstack gap-3">
                     <div>
-                        <label class="form-label" for="newGroupName">Category group</label>
-                        <input id="newGroupName" name="groupName" class="form-control" type="text" placeholder="Transportation" required />
+                        <label class="form-label" for="existingGroupName">Existing category group</label>
+                        <select id="existingGroupName" name="selectedGroupName" class="form-select">
+                            <option value="">Choose existing group</option>
+                            @if (_catalog is not null)
+                            {
+                                @foreach (var group in _catalog.Groups)
+                                {
+                                    <option value="@group.GroupName">@group.GroupName</option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label" for="newGroupName">Or add a new category group</label>
+                        <input id="newGroupName" name="newGroupName" class="form-control" type="text" placeholder="Transportation" />
+                        <div class="form-text">If you enter a new group name here, it will be used instead of the existing-group dropdown.</div>
                     </div>
 
                     <div>
